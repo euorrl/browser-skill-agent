@@ -10,6 +10,14 @@ from .session import Session
 from .waiting import Waiting
 from .help import TOOL_HELP
 
+TOOL_GROUPS = (
+    (Actions, ("click", "double_click", "hover", "fill", "type_text", "press", "select", "set_checked", "scroll", "drag")),
+    (Navigation, ("goto", "back", "reload", "tabs", "dialog")),
+    (Observation, ("read", "snapshot", "locate")),
+    (Waiting, ("wait", "wait_for")),
+    (Files, ("upload", "download")),
+)
+
 
 class BrowserTools:
     def __init__(self, page, approval=None, file_options=None):
@@ -18,15 +26,9 @@ class BrowserTools:
         self.observation = Observation(self.session)
         self.files = Files(self.session, file_options if file_options is not None else FileOptions())
         self._tools = {}
-        groups = [
-            (Actions(self.session), ("click", "double_click", "hover", "fill", "type_text",
-                                     "press", "select", "set_checked", "scroll", "drag")),
-            (Navigation(self.session), ("goto", "back", "reload", "tabs", "dialog")),
-            (self.observation, ("read", "snapshot", "locate")),
-            (Waiting(self.session), ("wait", "wait_for")),
-            (self.files, ("upload", "download")),
-        ]
-        for group, names in groups:
+        instances = {Observation: self.observation, Files: self.files}
+        for kind, names in TOOL_GROUPS:
+            group = instances[kind] if kind in instances else kind(self.session)
             self._tools.update({name: getattr(group, name) for name in names})
 
     @property

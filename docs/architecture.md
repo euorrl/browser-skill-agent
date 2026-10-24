@@ -7,9 +7,13 @@
 | `cli.py` | 解析参数、加载模型配置、启动并关闭 Edge、汇总输出 |
 | `browser_display.py` | 通过 CDP 控制本任务窗口位置，结束后显示同一会话 |
 | `skill.py` | 解析 YAML 和 Markdown 正文，绑定字符串参数 |
+| `studio/` | 中文流程工作台、默认参数库、对话选择、独立录制和运行窗口 |
 | `recording/recorder.py` | 手动录制浏览器、控制页、页面事件与下载生命周期 |
 | `recording/storage.py` | 原始事件落盘与操作合并 |
 | `recording/browser.js` | 页面及 iframe 中的用户事件与 DOM 状态捕获 |
+| `generation/prompt.py` | 与网站无关的生成规则、输出约定及现有 runtime 限制 |
+| `generation/generator.py` | 整理录制、复用模型接口、生成 Skill 草稿和独立报告 |
+| `generation/model.py` | 长草稿的流式接收、进度、完整性及用量处理；不保存推理文本 |
 | `runtime.py` | 顺序脚本或阶段批次循环；模型 API 调用、读取证据和 Token 累计 |
 | `approval.py` | 工具执行前的规则判断、人工/AI 授权与拒绝记录 |
 | `output.py` | 中文进度、结果显示及 JSON 输出 |
@@ -24,6 +28,8 @@
 | `tools/help.py` | 给模型的中文工具说明 |
 
 ## 调用链
+
+录制生成入口：`CLI generate → 录制摘要 → Model.request → 格式和工具签名校验 → SKILL.md + example_params.json + generation.json`。只生成草稿，不启动浏览器、不自动执行或修复；详见[生成说明](generation.md)。
 
 ```text
 CLI → load_skill → 创建独立浏览器上下文

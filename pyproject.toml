@@ -22,4 +22,4 @@ browser-skill-agent = "browser_skill_agent.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-browser_skill_agent = ["recording/*.js", "recording/*.html"]
+browser_skill_agent = ["recording/*.js", "recording/*.html", "studio/*.html", "studio/*.css", "studio/*.js"]

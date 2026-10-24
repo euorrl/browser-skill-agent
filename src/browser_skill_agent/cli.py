@@ -31,6 +31,12 @@ def parameter(text: str) -> tuple[str, str]:
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "studio":
+        from .studio.app import main as studio_main
+        return studio_main(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "generate":
+        from .generation.generator import main as generate_main
+        return generate_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "record":
         from .recording.recorder import main as record_main
         return record_main(sys.argv[2:])

@@ -77,6 +77,29 @@ with sync_playwright() as pw:
         with patch("builtins.input", side_effect=AssertionError("allow 不应询问")):
             assert tools.execute("click", {**click["args"], "requires_approval": True})["ok"]
         assert page.evaluate("window.count") == 3
+        page.set_content('''<form action="https://example.test/search"><input id="search-bar-input"><button>搜索</button></form>
+            <input aria-label="数量"><select aria-label="分类"><option>工具</option></select>
+            <button type="button" id="expand">展开面板</button><button type="button" id="play">播放</button>
+            <form action="https://example.test/order" method="post"><input id="order"><button id="submit">继续</button></form>
+            <button id="delete">删除</button><input type="password" aria-label="密码">''')
+        tools.approval = ApprovalPolicy('human', skill)
+        policy = tools.approval
+        for name,args in [('fill',{'target':{'id':'search-bar-input'},'value':'商品'}),
+                          ('press',{'target':{'id':'search-bar-input'},'key':'Enter'}),
+                          ('fill',{'target':{'label':'数量'},'value':'2'}),
+                          ('select',{'target':{'label':'分类'},'label':'工具'}),
+                          ('click',{'target':{'id':'expand'}}),('click',{'target':{'id':'play'}}),
+                          ('press',{'target':{'id':'order'},'key':'Tab'}),
+                          ('goto',{'url':'https://other.test/article'}),('back',{})]:
+            assert policy.inspect(tools,name,args,False)[0] is None,(name,args)
+        for name,args in [('click',{'target':{'id':'delete'}}),('click',{'target':{'id':'submit'}}),
+                          ('press',{'target':{'id':'order'},'key':'Enter'}),
+                          ('fill',{'target':{'label':'密码'},'value':'test'}),
+                          ('upload',{}),('download',{})]:
+            assert policy.inspect(tools,name,args,False)[0],(name,args)
+        with patch('builtins.input',side_effect=AssertionError('普通控件不应请求授权')):
+            assert tools.execute('click',{'target':{'id':'play'}})['ok']
+            assert tools.execute('fill',{'target':{'label':'数量'},'value':'3'})['ok']
     finally:
         browser.close()
 

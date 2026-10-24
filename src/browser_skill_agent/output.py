@@ -2,6 +2,20 @@
 
 import json
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
+
+_progress_sink = ContextVar("progress_sink", default=None)
+
+
+@contextmanager
+def capture_progress(sink):
+    """只捕获当前执行上下文的日志，不重定向全局 stdout/stderr。"""
+    token = _progress_sink.set(sink)
+    try:
+        yield
+    finally:
+        _progress_sink.reset(token)
 
 
 TOOL_NAMES = {
@@ -36,6 +50,9 @@ def compact(value, limit=400):
 
 def progress(message):
     print(message, file=sys.stderr, flush=True)
+    sink = _progress_sink.get()
+    if sink is not None:
+        sink(str(message))
 
 
 def model_progress(title, detail):

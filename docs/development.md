@@ -6,6 +6,8 @@
 
 ```powershell
 .\.venv\Scripts\python tests/recording.py
+.\.venv\Scripts\python tests/generation.py
+.\.venv\Scripts\python tests/studio.py
 .\.venv\Scripts\python tests/smoke.py
 .\.venv\Scripts\python tests/llm_batches.py
 .\.venv\Scripts\python tests/stage_navigation.py
@@ -25,6 +27,7 @@ git diff --check
 | stage_navigation.py | 预期导航及新建/切换标签页连续读取，URL 不符、等待缺失/失败和意外弹窗中断 |
 | approval.py | 三种授权策略、拒绝无副作用、对象变化、批次停止和审核 Token |
 | recording.py | 录制控制、用户事件、动态状态、文件、跨源框架、重启隔离和密码遮蔽 |
+| generation.py | 录制摘要、模型 HTTP 模拟、草稿加载与参数替换、工具签名和证据引用 |
 | smoke.py | Skill 参数绑定、模型 HTTP 适配、工具错误回传和执行次数上限 |
 | browser_tools.py | 原生/自定义下拉、容器定位、iframe、标签页、弹窗、上传下载 |
 | file_paths.py | 上传范围、授权拒绝、文件编号、下载命名、同名避让和 CLI 文件参数 |

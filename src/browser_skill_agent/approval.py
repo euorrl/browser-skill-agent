@@ -1,4 +1,4 @@
-"""工具执行前的操作授权；采用保守规则，不作为浏览器权限沙箱。"""
+"""工具执行前的关键操作授权；常规浏览直接放行，不作为浏览器权限沙箱。"""
 
 import json
 import re
@@ -14,14 +14,15 @@ REVIEW_PROMPT = """你审核浏览器的一次具体操作，不执行操作。
 仅返回 JSON：{"approved":true或false,"reason":"简短中文理由"}。
 """
 
-RISK_WORDS = re.compile(r"删除|清空|支付|付款|购买|下单|结账|提交|发送|发布|保存|确认|授权|转账|注销|上传|下载|"
-                        r"delete|remove|clear|pay|purchase|buy|checkout|submit|send|publish|save|confirm|authorize|transfer|upload|download", re.I)
+RISK_WORDS = re.compile(r"删除|清空|支付|付款|购买|下单|结账|提交|发送|发布|保存|确认|授权|转账|注销|上传|下载|登录|注册|订阅|关注|送礼|充值|"
+                        r"\b(?:delete|remove|clear|pay|purchase|buy|checkout|submit|send|publish|save|confirm|authorize|transfer|upload|download|login|subscribe)\b", re.I)
+SENSITIVE_FIELDS = re.compile(r"密码|验证码|银行卡|身份证|password|one.time.code|credit.card|cc-number", re.I)
 SEARCH_NAMES = re.compile(r"搜索|查询|查找|search|页面标题含有|这些词|精确匹配这些文字", re.I)
 VIEW_NAMES = re.compile(r"^(搜索[：:]?|查询|查找|高级搜索[：:]?|search|select language|展开|收起|下一页|上一页|next|previous)$", re.I)
 
 
 class ApprovalPolicy:
-    def __init__(self, mode, skill, reviewer=None, before_prompt=None, after_prompt=None):
+    def __init__(self, mode, skill, reviewer=None, before_prompt=None, after_prompt=None, human_prompt=None):
         if mode not in ("human", "ai", "allow"):
             raise ValueError("未知授权模式")
         self.mode = mode
@@ -30,6 +31,7 @@ class ApprovalPolicy:
         self.decisions = []
         self.before_prompt = before_prompt
         self.after_prompt = after_prompt
+        self.human_prompt = human_prompt
 
     def inspect(self, tools, name, args, required):
         """读取真实控件，而不是只相信模型提供的目标名称。"""
@@ -39,20 +41,19 @@ class ApprovalPolicy:
             details["download_name"] = args.get("filename") or "采用网站建议名称（同名加编号）"
         if name in ("read", "snapshot", "locate", "wait", "wait_for", "scroll", "hover"):
             return None, details
-        if name in ("upload", "download", "drag", "press"):
-            return "文件操作、拖动或按键可能产生副作用", details
+        if name in ("upload", "download", "drag"):
+            return "文件操作或拖动可能改变外部数据", details
         if name == "dialog":
             return ("接受网页弹窗" if args.get("action", "dismiss") == "accept" else None), details
         if name in ("goto", "tabs"):
             destination = args.get("url")
             if destination:
-                allowed = urlsplit(self.skill.get("start") or tools.page.url)
                 actual = urlsplit(urljoin(tools.page.url, destination))
-                if RISK_WORDS.search(destination) or (actual.scheme, actual.netloc) != (allowed.scheme, allowed.netloc):
-                    return "导航至其他站点或具有敏感动作字样的地址", details
+                if actual.scheme not in ("http", "https", "file") or RISK_WORDS.search(actual.path):
+                    return "非普通网页导航或关键操作地址", details
             return None, details
         if name in ("back", "reload"):
-            return "返回或刷新可能重放请求或改变页面状态", details
+            return None, details
         target = args.get("target")
         if not target:
             return "无法明确识别操作目标", details
@@ -62,6 +63,8 @@ class ApprovalPolicy:
             const node = el.closest('a,button,input,select,textarea,[role=button],[role=option],[role=combobox],[role=tab]') || el;
             const form = node.form || node.closest('form');
             return {tag:node.tagName,role:node.getAttribute('role'),type:node.type || '',
+                id:node.id,placeholder:node.getAttribute('placeholder') || '',autocomplete:node.autocomplete || '',
+                editable:node.isContentEditable,download:node.hasAttribute('download'),
                 name:node.getAttribute('aria-label') || [...(node.labels || [])].map(x=>x.innerText).join(' ') || node.innerText || '',
                 href:node.href || '', form:form ? {action:form.action,method:form.method,
                     fields:[...form.elements].map(e=>({name:e.name || e.id,type:e.type,
@@ -70,22 +73,45 @@ class ApprovalPolicy:
         }""")
         details["element"] = element
         label = element["name"]
-        if RISK_WORDS.search(label + " " + element["href"]):
-            return "控件或链接包含关键操作字样", details
+        search = (element["type"] == "search" or SEARCH_NAMES.search(' '.join(
+            str(element.get(k, '')) for k in ('name','id','placeholder'))))
+        form = element.get('form')
+        if form and SEARCH_NAMES.search(urlsplit(form['action']).path):
+            search = True
         if name in ("fill", "type_text", "select", "set_checked"):
-            if element["type"] == "search" or SEARCH_NAMES.search(label):
+            if element['type'] == 'password' or SENSITIVE_FIELDS.search(label+' '+element.get('autocomplete','')):
+                return "填写敏感身份或付款信息", details
+            if name == 'set_checked' and RISK_WORDS.search(label):
+                return "勾选业务确认或授权选项", details
+            return None, details
+        if name == 'press':
+            key = args.get('key', '')
+            if key in ('Tab','Shift+Tab','Escape','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'):
                 return None, details
-            return "修改非搜索表单字段，可能自动保存或触发业务变化", details
+            if key == 'Enter' and search:
+                return None, details
+            if key not in ('Enter', 'Space', ' '):
+                return "可能提交或触发快捷操作的按键", details
+            if key == 'Enter' and (form or element.get('editable') or element['tag'] == 'TEXTAREA'):
+                return "可能提交非搜索表单或发送内容", details
+        if element.get('download'):
+            return "下载文件", details
+        if RISK_WORDS.search(label + " " + urlsplit(element["href"]).path):
+            return "控件或链接包含关键操作字样", details
+        if search and (element['type'] == 'submit' or VIEW_NAMES.fullmatch(label.strip())):
+            return None, details
+        if element['type'] == 'submit' and form:
+            return "提交非搜索表单", details
         if element["tag"] == "A" and element["href"]:
-            current, dest = urlsplit(tools.page.url), urlsplit(element["href"])
-            if dest.scheme in ("http", "https") and (current.scheme, current.netloc) == (dest.scheme, dest.netloc):
+            dest = urlsplit(element["href"])
+            if dest.scheme in ("http", "https", "file"):
                 return None, details
-            return "跨站链接或非普通网页链接", details
+            return "非普通网页链接", details
         if element["role"] in ("option", "combobox", "tab"):
             return None, details
         if VIEW_NAMES.fullmatch(label.strip()):
             return None, details
-        return "无法确定为普通查看操作，按关键操作处理", details
+        return None, details
 
     def authorize(self, tools, name, args, required=False):
         if self.mode == "allow":
@@ -103,7 +129,8 @@ class ApprovalPolicy:
                     self.before_prompt(tools.page)
                 progress("仅批准这一次操作？[Y/n] 输入 y、yes 或直接回车允许，其他输入拒绝：")
                 try:
-                    approved = input().strip().lower() in ("", "y", "yes")
+                    approved = (self.human_prompt(reason, details) if self.human_prompt else
+                                input().strip().lower() in ("", "y", "yes"))
                     explanation = "用户明确批准" if approved else "用户未批准"
                 except (EOFError, KeyboardInterrupt):
                     approved, explanation = False, "没有取得人工授权"

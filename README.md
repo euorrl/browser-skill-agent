@@ -12,6 +12,22 @@
 
 ## 快速开始
 
+打开中文流程工作台，管理流程、对话填写参数或录制新流程：
+
+```powershell
+.\.venv\Scripts\python -m browser_skill_agent studio
+```
+
+工作台自动带入录制参数，录制使用独立浏览器，关闭录制浏览器后自动生成流程。详见[工作台说明](docs/studio.md)。
+
+已录制的流程可生成 Skill 草稿（使用 `.env` 模型配置，不执行网页操作）：
+
+```powershell
+.\.venv\Scripts\python -m browser_skill_agent generate data/recordings/<录制编号>
+```
+
+草稿、演示参数与生成报告保存到 `data/generated/`。生成不等于执行验证；详见[生成说明](docs/generation.md)。
+
 已验证环境：Windows、Microsoft Edge、Python 3.12。项目要求 Python 3.10+；当前 CLI 固定使用 Edge，其他系统尚未验证。
 
 ```powershell

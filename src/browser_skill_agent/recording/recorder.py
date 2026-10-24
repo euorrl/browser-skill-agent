@@ -244,6 +244,8 @@ class Recorder:
         old.session.update(status='abandoned',ended_at=now())
         old.event('recording_abandoned',reason='用户重新开始；网站已发生的操作没有撤销')
         old.save()
+        # 工作台录制没有控制标签页，保留临时空页避免关闭最后一页退出整个浏览器。
+        guard = await self.context.new_page() if self.control is None else None
         if getattr(self,'pending_dialog',None):
             await self.pending_dialog[1].dismiss()
             self.pending_dialog=None
@@ -253,6 +255,8 @@ class Recorder:
         for page,rec in list(self.owners.items()):
             if rec==old and not page.is_closed():await page.close()
         await self.begin(self.start_url)
+        if guard is not None:
+            await guard.close()
 
     def status(self):
         rec=self.current
