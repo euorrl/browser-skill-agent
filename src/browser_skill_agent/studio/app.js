@@ -1,6 +1,7 @@
 const $=id=>document.getElementById(id);
 let state={flows:[]}, selected=null, pendingId=null, lastList='', confirmAction=null, chatting=false;
 let displayedJob=null, completedJob=null, conversationVersion=0, planningAfterJob=false, jobSignature='';
+let guidanceShown=null;
 const labels={search_keyword:'搜索关键词',query:'查询内容',keyword:'关键词',topic_a:'第一个主题',topic_b:'第二个主题',quantity:'数量',product_name:'商品名称',category:'分类',source_file:'上传文件',download_dir:'下载目录',output_dir:'保存目录'};
 const statusText={unverified:'待验证',passed:'运行通过',blocked:'需要调整'};
 function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
@@ -27,7 +28,9 @@ function renderJob(job){
   const logs=node('details','job-logs'),summary=node('summary','','展开运行日志'),pre=node('pre');logs.id='jobLogs';pre.id='logText';logs.append(summary,pre);logs.ontoggle=()=>summary.textContent=logs.open?'收起运行日志':'展开运行日志';
   $('job').replaceChildren(bar,logs);
  }
- $('jobLabel').textContent=({working:'正在准备',running:'正在运行',recording:'正在录制',generating:'正在生成',done:'任务完成',blocked:'任务未完成',failed:'任务失败'})[job.state]||'任务进度';
+ $('jobLabel').textContent=({working:'正在准备',running:'正在运行',recording:'正在录制',saving:'正在保存',guidance:'录制完成 · 可补充说明',generating:'正在生成',done:'任务完成',blocked:'任务未完成',failed:'任务失败'})[job.state]||'任务进度';
+ if(job.mode)$('jobLabel').textContent+=' · '+(job.mode==='llm'?'LLM 运行':'固定步骤');
+ if(job.state==='guidance'&&guidanceShown!==job.id)showGuidance();
  const signature=JSON.stringify([job.state,job.browser_open,job.flow_id,job.recording_id]);
  if(signature!==jobSignature){
   jobSignature=signature;const actions=$('jobActions');actions.replaceChildren();
@@ -35,6 +38,7 @@ function renderJob(job){
    button(actions,'结束并生成',()=>api('record_stop').then(refresh));
    button(actions,'重新录制',()=>confirm('重新开始录制？','当前记录将被放弃，已发生的网站操作不会撤销。',()=>api('record_restart').then(refresh)));
   }
+  if(job.state==='guidance')button(actions,'补充说明或直接生成',showGuidance,'primary');
   if(job.browser_open)button(actions,'关闭任务浏览器',()=>api('close_browser').then(refresh),'primary');
   if(job.state==='done'&&job.kind==='record'&&job.flow_id)button(actions,'查看新流程',()=>openFlow(job.flow_id));
   if(job.state==='failed'&&job.recording_id)button(actions,'重新生成流程',()=>api('generate_again').then(refresh));
@@ -54,6 +58,18 @@ function renderJob(job){
  }
 }
 function button(parent,text,action,cls='secondary'){const b=node('button',cls,text);b.onclick=()=>Promise.resolve(action()).catch(()=>{});parent.append(b);return b;}
+function showGuidance(){
+ const job=state.job;if(!job||job.state!=='guidance')return;
+ if(guidanceShown!==job.id){$('guidanceName').value=job.requested_name||'';$('guidanceDescription').value='';$('guidanceParameters').value='';guidanceShown=job.id;}
+ if(!$('guidanceDialog').open)$('guidanceDialog').showModal();
+}
+async function submitGuidance(skip){
+ const buttons=$('guidanceForm').querySelectorAll('button');buttons.forEach(b=>b.disabled=true);
+ try{await api('guidance',{job_id:state.job.id,guidance:skip?{}:{name:$('guidanceName').value,description:$('guidanceDescription').value,parameters:$('guidanceParameters').value}});$('guidanceDialog').close();await refresh();}
+ finally{buttons.forEach(b=>b.disabled=false);}
+}
+$('guidanceForm').onsubmit=e=>{e.preventDefault();submitGuidance(false).catch(()=>{});};
+$('skipGuidance').onclick=()=>submitGuidance(true).catch(()=>{});
 function renderCards(){
  const items=state.flows.filter(f=>f.name.toLowerCase().includes($('search').value.toLowerCase())&&($('filter').value==='all'||f.status===$('filter').value));
  $('flows').replaceChildren();$('empty').hidden=items.length>0;
@@ -66,7 +82,7 @@ function parameterFields(container,values){container.replaceChildren();for(const
 function parameters(id){return Object.fromEntries([...$(id).querySelectorAll('[data-param]')].map(e=>[e.dataset.param,e.value]));}
 function tab(id){for(const name of ['runPanel','editPanel'])$(name).hidden=name!==id;for(const b of document.querySelectorAll('[data-tab]'))b.classList.toggle('selected',b.dataset.tab===id);}
 async function openFlow(id,params=null,edit=false){
- $('approvalMode').value='human';$('approvalMode').onchange();
+ $('enableLlm').checked=false;$('approvalMode').value='human';$('approvalMode').onchange();
  const detail=await api('details',{id});selected=detail.flow;$('flowTitle').textContent=selected.name;$('flowDescription').textContent=selected.description;$('editName').value=selected.name;
  parameterFields($('params'),params||selected.defaults);parameterFields($('editParams'),selected.defaults);
  $('steps').replaceChildren(...detail.steps.map(s=>node('li','',s)));
@@ -81,7 +97,7 @@ $('confirmCancel').onclick=()=>$('confirmDialog').close();$('confirmOk').onclick
 $('search').oninput=render;$('filter').onchange=render;
 $('newFlow').onclick=()=>$('recordDialog').showModal();
 $('recordForm').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('record',{name:$('recordName').value,url:$('recordUrl').value});$('recordDialog').close();await refresh();}finally{b.disabled=false;}};
-$('runFlow').onclick=async()=>{try{await api('run',{id:selected.id,params:parameters('params'),close_after:$('closeAfter').checked,approval:$('approvalMode').value});$('flowDialog').close();await refresh();}catch{}};
+$('runFlow').onclick=async()=>{try{await api('run',{id:selected.id,params:parameters('params'),close_after:$('closeAfter').checked,approval:$('approvalMode').value,llm:$('enableLlm').checked});$('flowDialog').close();await refresh();}catch{}};
 $('saveFlow').onclick=async()=>{try{await api('update',{id:selected.id,name:$('editName').value,defaults:parameters('editParams')});$('flowDialog').close();toast('流程已保存');await refresh();}catch{}};
 $('deleteFlow').onclick=()=>confirm('删除这个流程？','流程将从工作台移除。原始录制和历史生成文件会保留。',async()=>{await api('delete',{id:selected.id});$('flowDialog').close();await refresh();toast('流程已删除');});
 async function answer(approved){try{await api('answer',{id:pendingId,approved});$('approvalDialog').close();await refresh();}catch{}}

@@ -62,13 +62,13 @@ git diff --check
 .\.venv\Scripts\python tests/evaluate_skills.py
 ```
 
-默认依次运行 script 和 llm，覆盖当前全部 10 个 Skill；固定 allow 授权，每种模式最多两个独立浏览器并行，不自动重试失败任务。LLM 模式会调用真实服务并产生 Token 消耗。北京时间转换场景要求本机时区与 Skill 的 Asia/Shanghai 基准一致。
+默认依次运行 script 和 llm，覆盖当前全部 7 个 Skill；固定 allow 授权，每种模式最多两个独立浏览器并行，不自动重试失败任务。LLM 模式会调用真实服务并产生 Token 消耗。北京时间转换场景要求本机时区与 Skill 的 Asia/Shanghai 基准一致。
 
 单独运行一个案例：
 
 ```powershell
-.\.venv\Scripts\python tests/live_chinese_skills.py --skill element_cn_tabs --mode script
-.\.venv\Scripts\python tests/live_chinese_skills.py --skill element_cn_tabs --mode llm
+.\.venv\Scripts\python tests/live_chinese_skills.py --skill element_cn_collapse --mode script
+.\.venv\Scripts\python tests/live_chinese_skills.py --skill element_cn_collapse --mode llm
 ```
 
 全量报告默认保存于 `.cache/stage-evaluation-时间/`；单项报告默认保存于 `.cache/live-validation/`。两种入口均可用 `--report-root` 指定报告目录。每次单项运行包含 report.json、trace.json、stages.json 和 progress.log；全量入口额外写入 index.json。stages.json 记录模型决策、请求耗时和上一阶段状态，不保存完整请求上下文或密钥。脚本模式的 stages.json 为空列表。

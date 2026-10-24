@@ -14,11 +14,11 @@ from playwright.async_api import async_playwright
 from playwright.sync_api import sync_playwright
 
 from ..approval import ApprovalPolicy
-from ..generation.generator import generate
+from ..generation.generator import generate, normalize_guidance
 from ..generation.model import GenerationModel
 from ..recording.recorder import Recorder, ASSETS as RECORD_ASSETS
 from ..recording.storage import now
-from ..runtime import run_script
+from ..runtime import run, run_script
 from ..output import TOOL_NAMES, capture_progress
 from ..skill import load_skill
 from ..tools import BrowserTools
@@ -47,6 +47,7 @@ class Studio:
         self.closing = False
         self.chat_history = []
         self.chat_epoch = 0
+        self.guidance_answer = None
 
     def model(self, client, progress=None):
         values = [os.environ.get(k, "") for k in ("MODEL_BASE_URL", "MODEL_API_KEY", "MODEL_NAME")]
@@ -126,7 +127,7 @@ class Studio:
             await rec.closed.wait()
             if self.closing:
                 return
-            self.job.update(state="generating", message="录制已结束，正在保存并生成流程…")
+            self.job.update(state="saving", message="录制已结束，正在保存记录…")
             current = rec.current
             if current and current.session["status"] == "recording":
                 current.session["status"] = "finishing"
@@ -140,25 +141,38 @@ class Studio:
             await context.close()
             self.recorder = self.record_context = None
         self.job["recording_id"] = folder.name
-        await self.generate_flow(folder, name)
+        guidance = await self.collect_guidance(name)
+        if guidance is not None:
+            await self.generate_flow(folder, guidance.get("name", name), guidance)
 
-    async def generate_flow(self, folder, name):
+    async def collect_guidance(self, name):
+        self.guidance_answer = asyncio.get_running_loop().create_future()
+        self.job.update(state="guidance", requested_name=name,
+                        message="录制已保存。可补充名称、流程描述和参数建议，也可直接生成。")
+        try:
+            return await self.guidance_answer
+        finally:
+            self.guidance_answer = None
+
+    async def generate_flow(self, folder, name, guidance=None):
+        self.job.update(state="generating", requested_name=name, guidance=guidance or {}, message="正在生成流程…")
         def progress(text):
             self.job.update(message=text)
             self.log(text)
         def task():
             with httpx.Client(timeout=300) as client:
                 model = self.model(client, progress)
-                return generate(folder, model, self.root / "data/generated")
+                return generate(folder, model, self.root / "data/generated", guidance=guidance)
         destination, report = await asyncio.to_thread(task)
         item = self.store.add(destination / "SKILL.md", name=name or None)
         self.job.update(state="done", flow_id=item["id"], message="流程已保存。默认参数来自本次录制，首次运行前请检查。",
                         usage=report["usage"])
 
-    async def execute(self, ident, params, close_after, approval="human"):
+    async def execute(self, ident, params, close_after, approval="human", llm=False):
         if approval not in ("human", "ai", "allow"):
             raise ValueError("未知授权模式")
-        if approval == "ai":
+        needs_model = llm or approval == "ai"
+        if needs_model:
             self.model(None)
         item = self.store.get(ident)
         defaults = dict(item["defaults"])
@@ -168,16 +182,16 @@ class Studio:
         if any(not value.strip() for value in defaults.values()):
             raise ValueError("请补齐运行参数。")
         skill = load_skill(str(self.store.path(ident)), defaults)
-        self.job.update(params=defaults, approval=approval)
+        self.job.update(params=defaults, approval=approval, mode="llm" if llm else "script")
         loop = asyncio.get_running_loop()
         self.stop_browser.clear()
         def human(reason, details):
             return asyncio.run_coroutine_threadsafe(self.ask(reason, details), loop).result()
         def task():
-            with sync_playwright() as pw, (httpx.Client(timeout=300) if approval == "ai" else nullcontext()) as client:
+            with sync_playwright() as pw, (httpx.Client(timeout=300) if needs_model else nullcontext()) as client:
                 context = pw.chromium.launch_persistent_context("", channel="msedge", headless=False)
                 try:
-                    model = self.model(client, lambda text: self.job.update(message="授权审核：" + text)) if approval == "ai" else None
+                    model = self.model(client, lambda text: self.job.update(message="模型处理中：" + text)) if needs_model else None
                     policy = ApprovalPolicy(approval, skill, reviewer=model.review if model else None, human_prompt=human)
                     tools = BrowserTools(context.pages[0], approval=policy, file_options=FileOptions.from_skill(skill))
                     execute = tools.execute
@@ -187,7 +201,9 @@ class Studio:
                     tools.execute = progress_execute
                     self.job.update(state="running", approval=approval, message="浏览器正在执行流程…")
                     with capture_progress(self.log):
-                        result = run_script(skill, tools, max_steps=max(30, len(skill.get("actions", []))))
+                        budget = max(30, len(skill.get("actions", [])))
+                        result = run(skill, tools, model, max_steps=budget) if llm else run_script(skill, tools, max_steps=budget)
+                    result["mode"] = "llm" if llm else "script"
                     result["approval"] = {"mode": approval, "decisions": policy.decisions}
                     if model:
                         result["usage"] = dict(model.usage)
@@ -253,15 +269,21 @@ class Studio:
                     self.chat_history = []
                     self.chat_epoch += 1
             elif command == "run":
-                self.launch("run", self.execute(data["id"], data.get("params", {}), data.get("close_after") is True, data.get("approval", "human")), data["id"])
+                self.launch("run", self.execute(data["id"], data.get("params", {}), data.get("close_after") is True,
+                                                data.get("approval", "human"), data.get("llm") is True), data["id"])
             elif command == "close_browser":
                 self.stop_browser.set()
+            elif command == "guidance":
+                if not self.job or data.get("job_id") != self.job["id"] or self.job["state"] != "guidance" or not self.guidance_answer or self.guidance_answer.done():
+                    raise ValueError("此录制已不在等待补充信息，请刷新后重试。")
+                guidance = normalize_guidance(data.get("guidance", {}))
+                self.guidance_answer.set_result(guidance)
             elif command == "generate_again":
                 previous = self.job or {}
                 if not previous.get("recording_id"):
                     raise ValueError("没有可重试的录制")
                 ident, name = previous["recording_id"], previous.get("requested_name", "")
-                self.launch("record", self.generate_flow(self.root / "data/recordings" / ident, name))
+                self.launch("record", self.generate_flow(self.root / "data/recordings" / ident, name, previous.get("guidance")))
                 self.job.update(recording_id=ident, requested_name=name)
             elif command == "answer":
                 if self.pending and data.get("id") == self.pending["id"] and self.answer and not self.answer.done():
@@ -301,6 +323,8 @@ class Studio:
                 await self.closed.wait()
             finally:
                 self.closing = True
+                if self.guidance_answer and not self.guidance_answer.done():
+                    self.guidance_answer.set_result(None)
                 self.stop_browser.set()
                 if self.answer and not self.answer.done():
                     self.answer.set_result(False)

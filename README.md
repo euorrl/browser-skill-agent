@@ -18,7 +18,7 @@
 .\.venv\Scripts\python -m browser_skill_agent studio
 ```
 
-工作台自动带入录制参数，录制使用独立浏览器，关闭录制浏览器后自动生成流程。详见[工作台说明](docs/studio.md)。
+工作台自动带入录制参数，录制使用独立浏览器，关闭录制浏览器后可选填生成指导，再生成流程；运行时可选择启用 LLM，默认关闭。详见[工作台说明](docs/studio.md)。
 
 已录制的流程可生成 Skill 草稿（使用 `.env` 模型配置，不执行网页操作）：
 
@@ -126,13 +126,10 @@ MODEL_NAME=glm-5.3-flash
 | [element_cn_remote_select](skills/element_cn_remote_select/SKILL.md)           | 中文组件文档异步候选、动态定位、下拉精确匹配       | 5 步                    |
 | [chinese_image_file_pipeline](skills/chinese_image_file_pipeline/SKILL.md)     | 两个文件分别处理及批量处理，等待完成并保存四份 PNG | 16 步                   |
 | [bejson_timestamp_precision](skills/bejson_timestamp_precision/SKILL.md)       | 单选切换、动态毫秒字段、数值填写和双向转换         | 17 步                   |
-| [element_cn_tabs](skills/element_cn_tabs/SKILL.md)                             | 页签切换、面板读取、选中状态及返回                 | 9 步                    |
 | [element_cn_collapse](skills/element_cn_collapse/SKILL.md)                     | 多面板展开、动画等待、独立折叠及状态读取           | 7 步                    |
 | [element_cn_dialog](skills/element_cn_dialog/SKILL.md)                         | 模态弹窗打开、取消、重开、确认及关闭等待           | 8 步                    |
-| [element_cn_tree](skills/element_cn_tree/SKILL.md)                             | 树逐层展开、动态子节点、折叠与恢复                 | 7 步                    |
-| [element_cn_pagination](skills/element_cn_pagination/SKILL.md)                 | 精确页码、前后翻页、当前页与禁用边界               | 9 步                    |
 
-所有新 Skill 的命令、覆盖范围及实测结果见 [中文网站验证](docs/chinese-skills-validation.md)。 阶段连续读取修正后的十项双模式测试及历史对比见 [阶段执行评测](docs/stage-evaluation.md)。授权全部允许用于测试；平时可保留默认人工授权。上传测试文件只含生成的色彩图案，不接入图片模型。
+历史示例的命令、覆盖范围及实测结果见 [中文网站验证](docs/chinese-skills-validation.md)。 阶段连续读取修正后的十项双模式测试及历史对比见 [阶段执行评测](docs/stage-evaluation.md)。授权全部允许用于测试；平时可保留默认人工授权。上传测试文件只含生成的色彩图案，不接入图片模型。
 
 网站特定流程放在 Skill，通用工具不硬编码站点。页面可能改版，定位或等待条件不满足应停止。Skill 编写格式见 [指南](docs/skills.md)。
 

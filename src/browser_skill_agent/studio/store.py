@@ -12,12 +12,8 @@ DISPLAY_NAMES = {
     "chinese_image_file_pipeline": "批量处理并下载图片",
     "element_cn_collapse": "展开并读取折叠面板",
     "element_cn_dialog": "操作弹窗并读取结果",
-    "element_cn_pagination": "翻页查找列表内容",
     "element_cn_remote_select": "搜索并选择下拉选项",
-    "element_cn_tabs": "切换标签并读取内容",
-    "element_cn_tree": "展开与折叠树形目录",
     "vue_cn_navigation": "浏览文档并返回原页",
-    "huya_search_watch_stream": "搜索并打开虎牙直播间",
 }
 
 

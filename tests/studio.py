@@ -87,10 +87,12 @@ async def main():
             await page.get_by_role('button', name='▶ 运行', exact=True).click()
             await page.locator('#closeAfter').check()
             assert await page.locator('#approvalMode').input_value() == 'human'
+            assert not await page.locator('#enableLlm').is_checked()
             await page.locator('#runFlow').click()
             await wait_for(lambda: app.worker is not None)
             await app.worker
             assert app.job['result']['status'] == 'succeeded', app.job
+            assert app.job['result']['mode'] == 'script'
             assert app.job['browser_open'] is False
             assert any('操作步骤' in line['text'] for line in app.job['logs'])
             await page.evaluate('refresh()')
@@ -126,6 +128,30 @@ async def main():
                 assert app.chat_history == []
             assert reviewer.usage['requests'] == 1
             app.store.path(item['id']).write_text(original,encoding='utf-8')
+            class Planner:
+                usage = {'requests': 0}
+                def decide(self, state):
+                    self.usage['requests'] += 1
+                    if self.usage['requests'] == 1:
+                        return {'stage':'查询', 'actions':[
+                            {'tool':'fill','args':{'target':{'label':'查询'},'value':'模型执行'}},
+                            {'tool':'read','args':{'target':{'id':'query'},'kind':'value'}}]}
+                    return {'tool':'finish','args':{'status':'succeeded','message':'模型流程完成'}}
+                def review(self, state):
+                    raise AssertionError('人工授权不应请求 AI 审核')
+            planner = Planner()
+            app.model = lambda *args, **kwargs: planner
+            await page.get_by_role('button', name='▶ 运行', exact=True).click()
+            await page.locator('#enableLlm').check()
+            await page.locator('#runFlow').click()
+            await app.worker
+            assert app.job['result']['mode'] == 'llm'
+            assert app.job['result']['status'] == 'succeeded'
+            assert app.job['result']['approval']['mode'] == 'human'
+            assert planner.usage['requests'] == 2
+            await page.get_by_role('button', name='▶ 运行', exact=True).click()
+            assert not await page.locator('#enableLlm').is_checked()
+            await page.locator('#flowDialog .icon.close').click()
             # 保留窗口选项：结果返回后仍可查看，用户从工作台关闭。
             app.launch('run', app.execute(item['id'], {}, False), item['id'])
             await wait_for(lambda: app.job.get('browser_open') is True)
@@ -139,11 +165,13 @@ async def main():
             assert await pending is True
             # 独立录制窗口关闭后应保存并调用生成；不发送测试数据到模型。
             calls = []
-            async def generated(folder, name):
+            async def generated(folder, name, guidance=None):
                 session = json.loads((folder / 'session.json').read_text(encoding='utf-8'))
                 actions = json.loads((folder / 'actions.json').read_text(encoding='utf-8'))
                 assert session['status'] == 'completed'
                 assert any(a.get('value') == '录制测试' for a in actions)
+                assert name == '查询资料流程'
+                assert guidance == {'name':'查询资料流程','description':'查找内容并读取结果','parameters':'查询词作为参数'}
                 calls.append(folder)
                 app.job.update(state='done', message='测试生成已完成')
             app.generate_flow = generated
@@ -161,8 +189,26 @@ async def main():
             await target.locator('#query').fill('录制测试')
             await wait_for(lambda: any(a.get('value') == '录制测试' for a in app.recorder.current.actions))
             await app.record_context.close()
+            await page.locator('#guidanceDialog').wait_for(state='visible')
+            assert not calls
+            await page.locator('#guidanceName').fill('查询资料流程')
+            await page.locator('#guidanceDescription').fill('查找内容并读取结果')
+            await page.locator('#guidanceParameters').fill('查询词作为参数')
+            await page.evaluate('refresh()')
+            assert await page.locator('#guidanceParameters').input_value() == '查询词作为参数'
+            await page.screenshot(path=str(Path.cwd() / '.cache/studio-guidance.png'))
+            await page.get_by_role('button', name='按补充信息生成', exact=True).click()
             await app.worker
             assert calls and app.job['state'] == 'done', app.job
+            async def skip_flow():
+                assert await app.collect_guidance('') == {}
+                app.job.update(state='done', message='已跳过选填说明')
+            app.launch('record', skip_flow())
+            await page.locator('#guidanceDialog').wait_for(state='visible')
+            assert await page.locator('#guidanceName').input_value() == ''
+            await page.get_by_role('button', name='直接生成', exact=True).click()
+            await app.worker
+            assert app.job['state'] == 'done'
             assert not page.is_closed()
             # 禁止外部网页借用绑定操纵本地流程。
             result = await app.command({'page': target, 'frame': None}, 'delete', {'id': item['id']})

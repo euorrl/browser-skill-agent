@@ -17,11 +17,8 @@ ROOT=Path(__file__).resolve().parents[1]
 SAMPLE_HASHES={'sample-a.png': '110b3fbd8f1f9082358fd93a9c91d2134d245891ee17e8d8f830698c688489f9', 'sample-b.png': '97bf22a39f3ef119933dc7d83f8947b7fd4d1a6043972024608001f2759404a1'}
 CASES={
  'chinese_encyclopedia_research':{'topic_a':'人工智能','topic_b':'机器学习'},
- 'element_cn_tabs':{},
  'element_cn_collapse':{},
  'element_cn_dialog':{},
- 'element_cn_tree':{},
- 'element_cn_pagination':{},
  'vue_cn_navigation':{},
  'bejson_timestamp_precision':{},
  'element_cn_remote_select':{'query':'al','choice':'Alabama'},
@@ -62,16 +59,11 @@ def verify(name,tools):
   for topic in ['人工智能','机器学习']:
    assert any(r['tool']=='fill' and r['args'].get('value')==topic for r in good),f'未实际搜索 {topic}'
   return {'topics':['人工智能','机器学习'],'sources':sources,'article_reads_checked':True}
- if name in {'element_cn_tabs' ,'element_cn_collapse','element_cn_dialog','element_cn_tree','element_cn_pagination'}:
+ if name in {'element_cn_collapse','element_cn_dialog'}:
   example=tools.page.locator('.example-showcase').first
   def read_has(value,attribute=None):
    return any(r['result'].get('data')==value and (attribute is None or r['args'].get('attribute')==attribute) for r in reads)
-  if name=='element_cn_tabs':
-   for label in ['Config','Task','User']:
-    assert read_has(label),f'缺少实际面板读取：{label}'
-    assert any(r['args'].get('target',{}).get('name')==label and r['args'].get('attribute')=='aria-selected' and r['result'].get('data')=='true' for r in reads),f'缺少选中状态：{label}'
-   assert example.get_by_role('tab',name='User',exact=True).get_attribute('aria-selected')=='true'
-  elif name=='element_cn_collapse':
+  if name=='element_cn_collapse':
    for word in ['Operation feedback','Simplify the process']:
     assert any(word in str(r['result'].get('data')) for r in reads),word
    for label,value in [('Feedback','false'),('Efficiency','true')]:
@@ -83,16 +75,6 @@ def verify(name,tools):
     assert any(r['tool']=='click' and r['args'].get('target',{}).get('name')==label and r['result'].get('after_wait',{}).get('ok') for r in good),label
    assert sum(r['args'].get('kind')=='count' and r['result'].get('data')==0 for r in reads)>=2
    assert tools.page.get_by_role('dialog',name='Tips').count()==0
-  elif name=='element_cn_tree':
-   assert sum(r['result'].get('data')=='Level three 1-1-1' for r in reads)>=2
-   assert read_has(0),'缺少折叠后可见数量0的读取'
-   assert example.get_by_text('Level three 1-1-1',exact=True).is_visible()
-   assert sum(r['tool']=='click' and r['args'].get('target',{}).get('text')=='Level one 1' for r in good)>=3
-  else:
-   pages=[r['args'].get('target',{}).get('name') for r in reads if r['args'].get('attribute')=='aria-current' and r['result'].get('data')=='true']
-   assert pages==['page 3','page 4','page 3','page 1'],pages
-   assert example.get_by_role('button',name='Go to previous page').first.is_disabled()
-   assert read_has('','disabled'),'缺少读取禁用属性'
   return {'component':name,'actual_reads_checked':len(reads),'final_dom_checked':True}
  if name=='vue_cn_navigation':
   assert any(r['result'].get('data')=='Count is: 1' for r in reads),'缺少实际计数按钮读取'

@@ -161,8 +161,26 @@ def validate(result):
     return result
 
 
-def generate(recording, model, output_root):
+def normalize_guidance(value=None):
+    """用户自愿提供的生成指导，与网页证据分开传递。"""
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or set(value) - {"name", "description", "parameters"}:
+        raise ValueError("生成指导仅支持名称、描述和参数建议")
+    result = {}
+    for key, limit in (("name", 80), ("description", 4000), ("parameters", 2000)):
+        text = value.get(key, "")
+        if not isinstance(text, str) or len(text) > limit:
+            raise ValueError(f"{key} 须为不超过 {limit} 字的文字")
+        if text.strip():
+            result[key] = text.strip()
+    return result
+
+
+def generate(recording, model, output_root, guidance=None):
     state = prepare_recording(recording)
+    guidance = normalize_guidance(guidance)
+    state["user_guidance"] = guidance
     raw = model.request(state, SYSTEM_PROMPT)
     corrections = []
     for attempt in range(2):
@@ -180,9 +198,12 @@ def generate(recording, model, output_root):
             if hasattr(model, "progress"):
                 model.progress(f"草稿格式需修正：{exc}；仅尝试一次格式修正，不操作网页。")
             raw = model.request({"runtime": RUNTIME_HELP, "tools": TOOL_HELP, "draft": raw,
+                                 "user_guidance": guidance,
                                  "validation_error": str(exc),
                                  "instruction": "仅修正结构或工具参数错误，保持任务、参数和已有证据；不能增加未经证实的操作。返回完整 JSON。"}, SYSTEM_PROMPT)
     source_ids = {action["id"] for action in state["actions"]}
+    if guidance.get("name"):
+        result["display_name"] = guidance["name"]
     for entry in result["evidence_map"]:
         unknown = [source for source in entry["source_actions"] if source not in source_ids]
         if unknown:
@@ -200,7 +221,8 @@ def generate(recording, model, output_root):
     report = {k: v for k, v in result.items() if k not in {"skill", "example_params"}}
     report.update(recording_id=state["recording"]["id"], source=str(Path(recording).resolve()),
                   generated_at=datetime.now(timezone.utc).isoformat(), validated=False,
-                  usage=dict(model.usage), model=getattr(model, "model", None), format_corrections=corrections)
+                  usage=dict(model.usage), model=getattr(model, "model", None), format_corrections=corrections,
+                  user_guidance=guidance)
     (destination / "SKILL.md").write_text(
         "---\n" + yaml.safe_dump(skill, allow_unicode=True, sort_keys=False) + "---\n\n" + body + "\n", encoding="utf-8")
     for name, data in (("example_params.json", result["example_params"]), ("generation.json", report)):

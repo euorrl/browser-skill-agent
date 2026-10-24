@@ -56,3 +56,4 @@
 .job-logs pre{height:min(32vh,340px);max-height:none;margin:8px 0 0;overflow:auto;background:#f7f9fc;border:1px solid #e9edf4;padding:12px;border-radius:6px;font-size:12px;line-height:1.8;color:#607087}
 .chat-result{margin:0 0 12px;padding:10px;background:#f8faff;border:1px solid #e6ecf8;border-radius:8px}
 .chat-result summary{cursor:pointer;color:#52678d}.chat-result pre{max-height:220px;font-size:12px}
+#guidanceDialog textarea{display:block;margin-top:8px;padding:10px 12px;border:1px solid #dfe5ef;border-radius:7px;min-height:78px;max-height:180px;background:white}

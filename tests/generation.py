@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 
-from browser_skill_agent.generation.generator import generate, prepare_recording, validate
+from browser_skill_agent.generation.generator import generate, prepare_recording, validate, normalize_guidance
 from browser_skill_agent.generation.model import GenerationModel
 from browser_skill_agent.runtime import Model
 from browser_skill_agent.skill import load_skill
@@ -75,6 +75,22 @@ class GenerationTests(unittest.TestCase):
         self.write("session.json", {"schema_version": 1, "status": "abandoned"})
         with self.assertRaises(ValueError):
             prepare_recording(self.record)
+
+    def test_optional_guidance(self):
+        guidance = {'name':'我的查询流程','description':'查找目标信息','parameters':'查询词可调整'}
+        class GuidedModel:
+            usage = {}
+            def request(self, state, prompt):
+                self.received = state['user_guidance']
+                return draft()
+        model = GuidedModel()
+        folder, report = generate(self.record, model, self.root / 'guided', guidance)
+        self.assertEqual(model.received, guidance)
+        self.assertEqual(report['display_name'], guidance['name'])
+        self.assertEqual(report['user_guidance'], guidance)
+        self.assertEqual(normalize_guidance({'description':'  '}), {})
+        with self.assertRaises(ValueError):
+            normalize_guidance({'name': '名' * 81})
 
     def test_invalid_tool_and_parameter_rejected(self):
         for mutate in (lambda x: x["skill"]["actions"][0].update(tool="execute_code"),
