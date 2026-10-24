@@ -64,7 +64,7 @@ with sync_playwright() as pw:
         last = model.states[-1]["last_stage"]
         assert last["goal"] == "完整搜索" and last["success_criteria"] == "读取新结果"
         assert last["executed"] == 6 and last["skipped"] == 0
-        assert "读取结果" in last["stop_reason"]
+        assert "阶段计划已执行" in last["stop_reason"]
 
         # 未知控件展开后由模型主动选择观察，再使用实际看到的选项。
         page.set_content('<button onclick="document.querySelector(\'section\').hidden=false">展开</button>'
@@ -88,11 +88,34 @@ with sync_playwright() as pw:
         assert page.evaluate("window.count") == 1
         assert model.states[-1]["recent_actions"][-1]["batch_skipped"] == 1
 
-        # 读取产生新证据后不继续执行预先猜测的后续动作。
+        # 同阶段多份读取与已知动作连续执行，下一次调用能拿到所有证据。
+        page.set_content(html)
         page.evaluate("window.count=0")
-        model = PlannedModel([{"actions": [read, click]}, finish])
-        run(skill, tools, model)
-        assert page.evaluate("window.count") == 0
+        field_read = action("read", target={"label": "关键词"}, kind="value")
+        model = PlannedModel([{"actions": [fill, field_read, click, read, action("snapshot"),
+                                           action("locate", target={"role": "button", "name": "搜索"})]}, finish])
+        result = run(skill, tools, model)
+        assert result["llm_calls"] == 2 and result["action_steps"] == 6
+        assert page.evaluate("window.count") == 1
+        assert len(model.states[-1]["evidence"]) == 4
+        assert model.states[-1]["evidence"][0]["data"] == "009527"
+        assert model.states[-1]["evidence"][1]["data"] == "新结果"
+        assert model.states[-1]["last_stage"]["executed"] == 6
+        assert model.states[-1]["last_stage"]["skipped"] == 0
+
+        # 依赖新信息时显式观察，尾部不会执行；失败的读取同样立即停止。
+        for first_action in ({**read, "observe_after": True},
+                             {**action("snapshot"), "observe_after": True},
+                             {**action("locate", target={"role": "button", "name": "搜索"}), "observe_after": True},
+                             action("read", target={"role": "status"}, kind="unsupported")):
+            page.evaluate("window.count=0")
+            model = PlannedModel([{"actions": [first_action, click]}, finish])
+            run(skill, tools, model)
+            assert page.evaluate("window.count") == 0
+            assert model.states[-1]["last_stage"]["skipped"] == 1
+        model = PlannedModel([{"actions": [{**read, "observe_after": "false"}]}])
+        result = run(skill, tools, model, max_steps=1)
+        assert result["invalid_plans"] == 1 and result["action_steps"] == 0
 
         # 标签页创建后停止批次；不得在新页面上盲目填写旧目标。
         model = PlannedModel([{"actions": [action("tabs", action="new"), fill]}, finish])
@@ -121,4 +144,4 @@ with sync_playwright() as pw:
     finally:
         browser.close()
 
-print("通过：相同任务模型调用 4→2、等待失败不重放、读取/标签页观察边界、预算限制、证据保留和上下文裁剪。")
+print("通过：相同任务模型调用 4→2、等待失败不重放、连续读取与显式观察/标签页边界、预算限制、证据保留和上下文裁剪。")

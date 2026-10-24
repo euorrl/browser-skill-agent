@@ -72,19 +72,19 @@ actions:
     attribute: aria-selected
 stages:
 - goal: 切换并读取 Config
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"role": "tab", "nth": 0, "name": "Config"}, "wait_after":
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"role": "tab", "nth": 0, "name": "Config"}, "wait_after":
     {"target": {"role": "tabpanel", "nth": 0, "name": "Config"}, "state": "visible", "timeout": 15}}}, {"tool": "read", "args":
     {"target": {"role": "tabpanel", "nth": 0, "name": "Config"}, "max_chars": 600}}, {"tool": "read", "args": {"target": {"role":
     "tab", "nth": 0, "name": "Config"}, "kind": "attribute", "attribute": "aria-selected"}}]'
   evidence: 实际 read 返回本阶段目标内容或属性，不能仅凭 click 成功。
 - goal: 切换并读取 Task
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"role": "tab", "nth": 0, "name": "Task"}, "wait_after":
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"role": "tab", "nth": 0, "name": "Task"}, "wait_after":
     {"target": {"role": "tabpanel", "nth": 0, "name": "Task"}, "state": "visible", "timeout": 15}}}, {"tool": "read", "args":
     {"target": {"role": "tabpanel", "nth": 0, "name": "Task"}, "max_chars": 600}}, {"tool": "read", "args": {"target": {"role":
     "tab", "nth": 0, "name": "Task"}, "kind": "attribute", "attribute": "aria-selected"}}]'
   evidence: 实际 read 返回本阶段目标内容或属性，不能仅凭 click 成功。
 - goal: 切换并读取 User
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"role": "tab", "nth": 0, "name": "User"}, "wait_after":
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"role": "tab", "nth": 0, "name": "User"}, "wait_after":
     {"target": {"role": "tabpanel", "nth": 0, "name": "User"}, "state": "visible", "timeout": 15}}}, {"tool": "read", "args":
     {"target": {"role": "tabpanel", "nth": 0, "name": "User"}, "max_chars": 600}}, {"tool": "read", "args": {"target": {"role":
     "tab", "nth": 0, "name": "User"}, "kind": "attribute", "attribute": "aria-selected"}}]'

@@ -76,12 +76,12 @@ actions:
     attribute: aria-expanded
 stages:
 - goal: 打开并读取反馈
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"role": "button", "nth": 0, "name": "Feedback"},
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"role": "button", "nth": 0, "name": "Feedback"},
     "wait_after": {"target": {"role": "region", "nth": 0, "name": "Feedback"}, "state": "visible", "timeout": 15}}}, {"tool":
     "read", "args": {"target": {"role": "region", "nth": 0, "name": "Feedback"}, "max_chars": 600}}]'
   evidence: 实际 read 返回本阶段目标内容或属性，不能仅凭 click 成功。
 - goal: 打开效率并关闭反馈
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"role": "button", "nth": 0, "name": "Efficiency"},
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"role": "button", "nth": 0, "name": "Efficiency"},
     "wait_after": {"target": {"role": "region", "nth": 0, "name": "Efficiency"}, "state": "visible", "timeout": 15}}}, {"tool":
     "read", "args": {"target": {"role": "region", "nth": 0, "name": "Efficiency"}, "max_chars": 600}}, {"tool": "click", "args":
     {"target": {"role": "button", "nth": 0, "name": "Feedback"}, "wait_after": {"target": {"role": "region", "nth": 0, "name":

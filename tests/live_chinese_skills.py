@@ -1,6 +1,7 @@
 """显式运行的中文网站在线验证；LLM 模式会请求 .env 配置的真实模型。"""
 import argparse,hashlib,json,os,struct,time,traceback
-from datetime import datetime
+from datetime import datetime,timezone,timedelta
+from urllib.parse import unquote
 from pathlib import Path
 from contextlib import redirect_stdout,redirect_stderr
 import httpx
@@ -15,6 +16,7 @@ from browser_skill_agent.approval import ApprovalPolicy
 ROOT=Path(__file__).resolve().parents[1]
 SAMPLE_HASHES={'sample-a.png': '110b3fbd8f1f9082358fd93a9c91d2134d245891ee17e8d8f830698c688489f9', 'sample-b.png': '97bf22a39f3ef119933dc7d83f8947b7fd4d1a6043972024608001f2759404a1'}
 CASES={
+ 'chinese_encyclopedia_research':{'topic_a':'人工智能','topic_b':'机器学习'},
  'element_cn_tabs':{},
  'element_cn_collapse':{},
  'element_cn_dialog':{},
@@ -25,6 +27,19 @@ CASES={
  'element_cn_remote_select':{'query':'al','choice':'Alabama'},
  'chinese_image_file_pipeline':{'file_a':'sample-a.png','file_b':'sample-b.png'},
 }
+class RecordedModel(Model):
+ """仅保存决策与耗时，不记录 API 密钥或完整请求上下文。"""
+ def __init__(self,*args,**kwargs):
+  super().__init__(*args,**kwargs);self.records=[]
+ def decide(self,state):
+  started=time.monotonic();record={'call':len(self.records)+1,'steps_left':state['steps_left'],'previous_stage':state.get('last_stage')}
+  try:
+   decision=super().decide(state);record['decision']=decision;return decision
+  except Exception as exc:
+   record['error']=f'{type(exc).__name__}: {exc}';raise
+  finally:
+   record['elapsed_seconds']=round(time.monotonic()-started,2);self.records.append(record)
+
 class RecordedTools(BrowserTools):
  def __init__(self,*args,**kwargs):
   super().__init__(*args,**kwargs);self.records=[]
@@ -36,7 +51,18 @@ class RecordedTools(BrowserTools):
 def verify(name,tools):
  good=[r for r in tools.records if r['result'].get('ok')]
  reads=[r for r in good if r['tool']=='read']
- if name in {'element_cn_tabs','element_cn_collapse','element_cn_dialog','element_cn_tree','element_cn_pagination'}:
+ if name=='chinese_encyclopedia_research':
+  sources=[]
+  for topic in ['人工智能','机器学习']:
+   article=[r for r in reads if unquote(r['url']).split('?')[0].endswith('/wiki/'+topic) and r['args'].get('target',{}).get('id')=='mw-content-text' and len(str(r['result'].get('data','')))>=100]
+   assert article,f'缺少 {topic} 实际条目正文读取，搜索摘要不能替代'
+   headings=[{'url':page.url,'title':page.locator('#firstHeading .mw-page-title-main').inner_text().strip()} for page in tools.page.context.pages if '/wiki/' in page.url]
+   assert any(item['title']==topic for item in headings),f'缺少 {topic} 对应条目标签页：{headings}'
+   sources.append(article[-1]['url'])
+  for topic in ['人工智能','机器学习']:
+   assert any(r['tool']=='fill' and r['args'].get('value')==topic for r in good),f'未实际搜索 {topic}'
+  return {'topics':['人工智能','机器学习'],'sources':sources,'article_reads_checked':True}
+ if name in {'element_cn_tabs' ,'element_cn_collapse','element_cn_dialog','element_cn_tree','element_cn_pagination'}:
   example=tools.page.locator('.example-showcase').first
   def read_has(value,attribute=None):
    return any(r['result'].get('data')==value and (attribute is None or r['args'].get('attribute')==attribute) for r in reads)
@@ -100,9 +126,10 @@ def main():
  parser=argparse.ArgumentParser(description=__doc__)
  parser.add_argument('--skill',choices=CASES,required=True)
  parser.add_argument('--mode',choices=['script','llm'],required=True)
+ parser.add_argument('--report-root',type=Path,default=ROOT/'.cache'/'live-validation',help='本次评测报告目录')
  args=parser.parse_args();os.chdir(ROOT);load_dotenv(ROOT/'.env')
- stamp=datetime.now().strftime('%Y%m%d-%H%M%S')
- folder=ROOT/'.cache'/'live-validation'/f'{args.skill}-{args.mode}-{stamp}';folder.mkdir(parents=True)
+ stamp=datetime.now(timezone(timedelta(hours=8))).strftime('%Y%m%d-%H%M%S')
+ folder=args.report_root/f'{args.skill}-{args.mode}-{stamp}';folder.mkdir(parents=True)
  params=dict(CASES[args.skill]);params['save_dir']=str(ROOT/'files'/'downloads'/'validation'/folder.name)
  result={};model=None;tools=None;started=time.monotonic();verified=False;error=None
  with (folder/'progress.log').open('w',encoding='utf-8') as log,redirect_stderr(log),redirect_stdout(log):
@@ -115,12 +142,13 @@ def main():
    with sync_playwright() as pw,httpx.Client(timeout=120) as client:
     browser=pw.chromium.launch(channel='msedge',headless=True)
     try:
-     page=browser.new_page()
+     context=browser.new_context()
+     page=context.new_page()
      tools=RecordedTools(page,approval=ApprovalPolicy('allow',skill),file_options=FileOptions.from_skill(skill))
      if args.mode=='llm':
       names=['MODEL_BASE_URL','MODEL_API_KEY','MODEL_NAME']
       if any(not os.environ.get(n) for n in names):raise ValueError('缺少模型配置，不打印密钥')
-      model=Model(client,*(os.environ[n] for n in names))
+      model=RecordedModel(client,*(os.environ[n] for n in names))
       result=run(skill,tools,model,max_steps=30)
      else:result=run_script(skill,tools,max_steps=30)
      if result.get('status')=='succeeded':
@@ -130,6 +158,12 @@ def main():
   except Exception as exc:
    error=f'{type(exc).__name__}: {exc}';traceback.print_exc()
  report={'skill':args.skill,'mode':args.mode,'approval':'allow','tested_at':stamp,'elapsed_seconds':round(time.monotonic()-started,1),'verified':verified,'error':error,'result':result,'usage':dict(model.usage) if model else None}
+ report.update({'model':os.environ.get('MODEL_NAME') if model else None,
+                'skill_sha256':hashlib.sha256((ROOT/'skills'/args.skill/'SKILL.md').read_bytes()).hexdigest(),
+                'runtime_sha256':hashlib.sha256((ROOT/'src/browser_skill_agent/runtime.py').read_bytes()).hexdigest(),
+                'llm_seconds':round(sum(r['elapsed_seconds'] for r in model.records),2) if model else 0,
+                'recorded_actions':len(tools.records) if tools else 0})
+ (folder/'stages.json').write_text(json.dumps(model.records if model else [],ensure_ascii=False,indent=2),encoding='utf-8')
  (folder/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
  (folder/'trace.json').write_text(json.dumps(tools.records if tools else [],ensure_ascii=False,indent=2),encoding='utf-8')
  print(json.dumps({'report':str(folder/'report.json'),**report},ensure_ascii=False),flush=True)

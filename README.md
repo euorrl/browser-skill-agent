@@ -37,19 +37,19 @@ python -m venv .venv
 .\.venv\Scripts\python -m browser_skill_agent --help
 ```
 
-| 参数 | 默认值 | 作用 |
-| --- | --- | --- |
-| `skill` | 必填 | SKILL.md 路径 |
-| `--param name=value` | 无 | 任务参数，可重复使用；含空格时加引号 |
-| `--llm` | 关闭 | 使用模型分批决策；默认顺序执行 actions |
-| `--approval human/ai/allow` | human | 关键操作人工确认、AI 审核或全部允许，独立于 --llm |
-| `--max-steps N` | 30 | 执行步数上限；LLM 模式包含 finish 和无效计划 |
-| `--headless` | 关闭 | 全程无窗口，不等待回车 |
-| `--result-only` | 关闭 | 执行时窗口位于屏幕外，结束后显示同一会话 |
-| `--keep-open` / `--no-keep-open` | 开启 | 可见浏览器结束后是否保留，默认回车后关闭 |
-| `--profile-dir PATH` | 独立临时目录 | 指定跨次保留的浏览器会话目录 |
-| `--json` | 关闭 | 最终结果以 JSON 输出，进度仍输出到 stderr |
-| `--ignore-https-errors` | 关闭 | 仅忽略本次浏览器会话的 HTTPS 证书错误 |
+| 参数                                 | 默认值       | 作用                                              |
+| ------------------------------------ | ------------ | ------------------------------------------------- |
+| `skill`                            | 必填         | SKILL.md 路径                                     |
+| `--param name=value`               | 无           | 任务参数，可重复使用；含空格时加引号              |
+| `--llm`                            | 关闭         | 使用模型分批决策；默认顺序执行 actions            |
+| `--approval human/ai/allow`        | human        | 关键操作人工确认、AI 审核或全部允许，独立于 --llm |
+| `--max-steps N`                    | 30           | 执行步数上限；LLM 模式包含 finish 和无效计划      |
+| `--headless`                       | 关闭         | 全程无窗口，不等待回车                            |
+| `--result-only`                    | 关闭         | 执行时窗口位于屏幕外，结束后显示同一会话          |
+| `--keep-open` / `--no-keep-open` | 开启         | 可见浏览器结束后是否保留，默认回车后关闭          |
+| `--profile-dir PATH`               | 独立临时目录 | 指定跨次保留的浏览器会话目录                      |
+| `--json`                           | 关闭         | 最终结果以 JSON 输出，进度仍输出到 stderr         |
+| `--ignore-https-errors`            | 关闭         | 仅忽略本次浏览器会话的 HTTPS 证书错误             |
 
 `--headless` 与 `--result-only` 互斥；`--result-only` 不能与 `--no-keep-open` 组合。默认显示全部操作过程；`--result-only` 保留 DOM、输入值和标签页，不重新加载结果页，任务栏可能仍有浏览器图标。它不隐藏终端进度。
 
@@ -79,7 +79,7 @@ MODEL_NAME=glm-5.3-flash
 .\.venv\Scripts\python -m browser_skill_agent skills/chinese_encyclopedia_research/SKILL.md --param "topic_a=人工智能" --param "topic_b=机器学习" --llm --result-only
 ```
 
-每个阶段都会请求模型，通常比脚本模式慢。Skill 提供目标、完成证据和观察建议，LLM 根据实际页面决定连续操作及观察节点，不按固定步数拆分。阶段末尾读取结果，再由下一次决策判断进展；遇到操作/等待失败、导航、标签页变化或获准的关键操作也会提前交回模型，授权拒绝则停止任务。`--batch-size` 已移除，旧命令请删掉该参数；`--max-steps` 仍限制整个任务的执行步数，默认 30。最终统计服务端报告的输入、输出和总 Token；缺失统计时显示未知或不完整，不估算费用。每次发送去除脚本 actions 的 Skill、工具说明、最多 10,000 字符自动快照、最近六次操作、最近八份读取证据及上一阶段执行情况，详见 [架构与模型交互](docs/architecture.md)。
+每个阶段都会请求模型，通常比脚本模式慢。Skill 提供目标、完成证据和观察建议，LLM 根据实际页面决定连续操作及观察节点，不按固定步数拆分。阶段内可连续读取多份结果，完成计划后统一判断进展；需要立即依据新信息决策时，在动作顶层设置 `observe_after: true`；遇到操作/等待失败、导航、标签页变化或获准的关键操作也会提前交回模型，授权拒绝则停止任务。`--batch-size` 已移除，旧命令请删掉该参数；`--max-steps` 仍限制整个任务的执行步数，默认 30。最终统计服务端报告的输入、输出和总 Token；缺失统计时显示未知或不完整，不估算费用。每次发送去除脚本 actions 的 Skill、工具说明、最多 10,000 字符自动快照、最近六次操作、最近八份读取证据及上一阶段执行情况，详见 [架构与模型交互](docs/architecture.md)。
 
 ## 文件上传与下载
 
@@ -91,20 +91,20 @@ MODEL_NAME=glm-5.3-flash
 
 授权规则、拒绝后的行为及三种模式的命令见 [操作授权](docs/authorization.md)。默认人工模式遇到关键操作，在终端输入 `y`、`yes` 或直接回车允许，输入 `n` 或其他内容拒绝；输入流关闭仍拒绝。结束后显示模式会临时展示当前页面供确认。AI 审核会增加请求和 Token 消耗，即使没有启用 `--llm`。
 
-| Skill | 用途 | 默认脚本 |
-| --- | --- | --- |
-| [chinese_encyclopedia_research](skills/chinese_encyclopedia_research/SKILL.md) | 中文高级搜索、排序、范围筛选、跨标签页调研 | 22 步，输出标题与短摘录 |
-| [vue_cn_navigation](skills/vue_cn_navigation/SKILL.md) | 中文文档计数器、提示遮挡处理、SPA 跳转及两次返回 | 13 步 |
-| [element_cn_remote_select](skills/element_cn_remote_select/SKILL.md) | 中文组件文档异步候选、动态定位、下拉精确匹配 | 5 步 |
-| [chinese_image_file_pipeline](skills/chinese_image_file_pipeline/SKILL.md) | 两个文件分别处理及批量处理，等待完成并保存四份 PNG | 16 步 |
-| [bejson_timestamp_precision](skills/bejson_timestamp_precision/SKILL.md) | 单选切换、动态毫秒字段、数值填写和双向转换 | 17 步 |
-| [element_cn_tabs](skills/element_cn_tabs/SKILL.md) | 页签切换、面板读取、选中状态及返回 | 9 步 |
-| [element_cn_collapse](skills/element_cn_collapse/SKILL.md) | 多面板展开、动画等待、独立折叠及状态读取 | 7 步 |
-| [element_cn_dialog](skills/element_cn_dialog/SKILL.md) | 模态弹窗打开、取消、重开、确认及关闭等待 | 8 步 |
-| [element_cn_tree](skills/element_cn_tree/SKILL.md) | 树逐层展开、动态子节点、折叠与恢复 | 7 步 |
-| [element_cn_pagination](skills/element_cn_pagination/SKILL.md) | 精确页码、前后翻页、当前页与禁用边界 | 9 步 |
+| Skill                                                                         | 用途                                               | 默认脚本                |
+| ----------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------- |
+| [chinese_encyclopedia_research](skills/chinese_encyclopedia_research/SKILL.md) | 中文高级搜索、排序、范围筛选、跨标签页调研         | 22 步，输出标题与短摘录 |
+| [vue_cn_navigation](skills/vue_cn_navigation/SKILL.md)                         | 中文文档计数器、提示遮挡处理、SPA 跳转及两次返回   | 13 步                   |
+| [element_cn_remote_select](skills/element_cn_remote_select/SKILL.md)           | 中文组件文档异步候选、动态定位、下拉精确匹配       | 5 步                    |
+| [chinese_image_file_pipeline](skills/chinese_image_file_pipeline/SKILL.md)     | 两个文件分别处理及批量处理，等待完成并保存四份 PNG | 16 步                   |
+| [bejson_timestamp_precision](skills/bejson_timestamp_precision/SKILL.md)       | 单选切换、动态毫秒字段、数值填写和双向转换         | 17 步                   |
+| [element_cn_tabs](skills/element_cn_tabs/SKILL.md)                             | 页签切换、面板读取、选中状态及返回                 | 9 步                    |
+| [element_cn_collapse](skills/element_cn_collapse/SKILL.md)                     | 多面板展开、动画等待、独立折叠及状态读取           | 7 步                    |
+| [element_cn_dialog](skills/element_cn_dialog/SKILL.md)                         | 模态弹窗打开、取消、重开、确认及关闭等待           | 8 步                    |
+| [element_cn_tree](skills/element_cn_tree/SKILL.md)                             | 树逐层展开、动态子节点、折叠与恢复                 | 7 步                    |
+| [element_cn_pagination](skills/element_cn_pagination/SKILL.md)                 | 精确页码、前后翻页、当前页与禁用边界               | 9 步                    |
 
-所有新 Skill 的命令、覆盖范围及实测结果见 [中文网站验证](docs/chinese-skills-validation.md)。授权全部允许用于测试；平时可保留默认人工授权。上传测试文件只含生成的色彩图案，不接入图片模型。
+所有新 Skill 的命令、覆盖范围及实测结果见 [中文网站验证](docs/chinese-skills-validation.md)。 阶段连续读取修正后的十项双模式测试及历史对比见 [阶段执行评测](docs/stage-evaluation.md)。授权全部允许用于测试；平时可保留默认人工授权。上传测试文件只含生成的色彩图案，不接入图片模型。
 
 网站特定流程放在 Skill，通用工具不硬编码站点。页面可能改版，定位或等待条件不满足应停止。Skill 编写格式见 [指南](docs/skills.md)。
 
@@ -112,11 +112,11 @@ MODEL_NAME=glm-5.3-flash
 
 中文进度写入 stderr，最终结果写入 stdout。默认不保存运行日志或逐轮模型请求。
 
-| 状态 | 含义 | 退出码 |
-| --- | --- | --- |
-| `succeeded` | 脚本步骤及指定等待通过，或模型返回完成状态 | 0 |
-| `blocked` | 脚本操作/等待受阻、达到上限，或模型报告无法继续 | 1 |
-| `failed` | 配置、启动、接口或执行循环出现异常 | 1 |
+| 状态          | 含义                                            | 退出码 |
+| ------------- | ----------------------------------------------- | ------ |
+| `succeeded` | 脚本步骤及指定等待通过，或模型返回完成状态      | 0      |
+| `blocked`   | 脚本操作/等待受阻、达到上限，或模型报告无法继续 | 1      |
+| `failed`    | 配置、启动、接口或执行循环出现异常              | 1      |
 
 参数格式错误由命令行解析器返回退出码 2。成功状态不代表独立核验了业务结果；读取摘录也不代表阅读全文。脚本结果的 `outputs` 包含读取数据与来源，模型总结位于 `message`。两种模式都提供 `mode`、`elapsed_seconds` 和 `usage`；正常执行结果包含 `turns` 和最终 `url`；LLM 模式的 turns/llm_calls 为模型调用次数，steps 为执行步数（含 finish 和无效计划），启动异常时可能没有这些字段。
 

@@ -28,14 +28,15 @@ steps 表示小目标，不是固定脚本；已经完成的小目标可以跳�
 每次仅返回一个 JSON 对象。单个操作仍可返回 {"tool":"back","args":{}}。
 阶段格式为 {"stage":"搜索商品","success_criteria":"结果显示目标关键词，已读到商品列表","actions":[{"tool":"fill","args":{...}},{"tool":"click","args":{...}},{"tool":"read","args":{...}}]}。
 没有固定批次长度，但整个计划不得超过剩余总预算 steps_left。只有当前页面或 Skill 明确提供的定位器才可连续使用。
-在阶段末尾用 read/snapshot/locate 获取完成证据或下一步所需信息；这些读取操作是观察节点，不在其后安排依赖读取结果的动作。
+read/snapshot/locate 不会自动中断阶段。同一阶段可连续收集多份证据，完成计划后统一交回模型判断；已知且不依赖新读取结果的动作也可继续。
+如果后续动作需要依据新读取结果选择目标或决定是否执行，把读取安排为阶段最后一步，或在动作顶层设置 observe_after:true；Runtime 会停止余下计划。不要在读取后预先猜测依赖该结果的动作。
 例如未知下拉选项：展开→snapshot，然后依据新选项规划；已知表单：填写→提交并等待结果→read。不把整项任务盲目塞进一个阶段。
 优先按 Skill stages 的 path、evidence、observe_when、interrupt_when 规划完整阶段，不把已知控件的展开和等待单独拆成模型调用。
 等待输入框优先用 role:textbox 和 name，不用可能同时匹配标签和提示的 text；定位歧义时修正定位，不重复已成功的点击。
 不能猜测未知控件。已知导航可在动作顶层添加 expected_url（完整 URL 或 * 通配模式），同时在 args.wait_after 等待目标页面的具体控件或标题。
 例如 {"tool":"click","expected_url":"https://example.org/article/*","args":{"target":{...},"wait_after":{"target":{"role":"heading","name":"目标标题"}}}}，后接已知正文的 read。
 只有实际 URL 匹配 expected_url 且 wait_after 成功，预期导航或明确的 tabs new/switch 才继续执行；意外弹出标签页仍会中断。不为减少调用而使用无意义的宽泛 URL 或等待条件。
-read/snapshot/locate 之后交回模型判断；授权关键操作、无预期条件的导航和意外标签页变化仍提前结束阶段。
+优先完整执行一个 Skill 阶段，不为单次 read 拆分模型调用。observe_after:true 是显式观察边界；授权关键操作、无预期条件的导航和意外标签页变化仍提前结束阶段。
 工具失败、后续等待失败时中止余下操作，不自动重放。finish 必须单独返回，不得放进批量 actions。
 stage 是本阶段目标，success_criteria 是判断所需证据，不是可执行断言；具体等待仍通过 wait_after/wait_for 实现。
 last_stage 给出上次目标、已执行步数、未执行步数及停止原因。阶段计划执行完不代表目标已完成，必须依据新页面和证据判断；未完成时只规划缺失部分，不重做已成功的操作。
@@ -135,7 +136,7 @@ def run_script(skill: dict, tools: BrowserTools, max_steps: int = 30) -> dict:
 
 
 def run(skill: dict, tools: BrowserTools, model: Model, max_steps: int = 30) -> dict:
-    """执行模型按信息依赖划分的阶段，在观察节点交回控制。"""
+    """完整执行已知阶段，在显式观察节点或强制边界交回控制。"""
     history, evidence = [], []
     used, calls = 0, 0
     action_steps, finish_steps, invalid_plans = 0, 0, 0
@@ -216,12 +217,13 @@ def run(skill: dict, tools: BrowserTools, model: Model, max_steps: int = 30) -> 
                  and isinstance(decision.get("success_criteria", ""), str)
                  and all(isinstance(a, dict) and isinstance(a.get("tool"), str)
                          and a["tool"] != "finish" and isinstance(a.get("args", {}), dict)
+                         and ("observe_after" not in a or isinstance(a["observe_after"], bool))
                          and ("expected_url" not in a or (isinstance(a["expected_url"], str) and bool(a["expected_url"])))
                          for a in actions))
         if not valid:
             used += 1
             invalid_plans += 1
-            result = {"ok": False, "error": "阶段计划格式错误：操作数必须在剩余总预算 steps_left 内，stage/success_criteria 必须为文字，finish 只能单独返回；本计划未执行"}
+            result = {"ok": False, "error": "阶段计划格式错误：操作数必须在剩余总预算 steps_left 内，stage/success_criteria 必须为文字，observe_after 必须为布尔值，finish 只能单独返回；本计划未执行"}
             history.append({"result": result})
             result_progress(result)
             continue
@@ -268,7 +270,7 @@ def run(skill: dict, tools: BrowserTools, model: Model, max_steps: int = 30) -> 
                                    and fnmatchcase(tools.page.url, action["expected_url"]))
             navigation = (name in ("goto", "back", "reload", "tabs")
                           or tools.page != page or tools.page.url != url or current_pages != pages)
-            boundary = (name in ("read", "snapshot", "locate")
+            boundary = (action.get("observe_after", False)
                         or result.get("approval", {}).get("required", False)
                         or navigation and not expected_navigation
                         or bool(action.get("expected_url")) and not expected_navigation)
@@ -277,8 +279,8 @@ def run(skill: dict, tools: BrowserTools, model: Model, max_steps: int = 30) -> 
                     reason = "操作或等待失败，需重新观察"
                 elif result.get("approval", {}).get("required", False):
                     reason = "关键操作已执行，需观察实际结果"
-                elif name in ("read", "snapshot", "locate"):
-                    reason = "已取得新的读取结果，交回模型判断"
+                elif action.get("observe_after", False):
+                    reason = "到达显式观察节点，交回模型判断"
                 elif action.get("expected_url"):
                     reason = "预期导航未通过 URL、等待或标签页条件验证，需重新观察"
                 else:

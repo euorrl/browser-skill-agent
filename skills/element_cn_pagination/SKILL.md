@@ -67,13 +67,13 @@ actions:
     attribute: disabled
 stages:
 - goal: 跳到3并向后翻页
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"role": "listitem", "nth": 0, "name": "page 3"}}},
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"role": "listitem", "nth": 0, "name": "page 3"}}},
     {"tool": "read", "args": {"target": {"role": "listitem", "nth": 0, "name": "page 3"}, "kind": "attribute", "attribute":
     "aria-current"}}, {"tool": "click", "args": {"target": {"role": "button", "nth": 0, "name": "Go to next page"}}}, {"tool":
     "read", "args": {"target": {"role": "listitem", "nth": 0, "name": "page 4"}, "kind": "attribute", "attribute": "aria-current"}}]'
   evidence: 实际 read 返回本阶段目标内容或属性，不能仅凭 click 成功。
 - goal: 向前翻页并回到边界
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"role": "button", "nth": 0, "name": "Go to previous
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"role": "button", "nth": 0, "name": "Go to previous
     page"}}}, {"tool": "read", "args": {"target": {"role": "listitem", "nth": 0, "name": "page 3"}, "kind": "attribute", "attribute":
     "aria-current"}}, {"tool": "click", "args": {"target": {"role": "listitem", "nth": 0, "name": "page 1"}}}, {"tool": "read",
     "args": {"target": {"role": "listitem", "nth": 0, "name": "page 1"}, "kind": "attribute", "attribute": "aria-current"}},

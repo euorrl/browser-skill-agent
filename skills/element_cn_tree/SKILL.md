@@ -61,7 +61,7 @@ actions:
     max_chars: 600
 stages:
 - goal: 逐层展开读取叶子
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"text": "Level one 1", "exact": true, "within":
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"text": "Level one 1", "exact": true, "within":
     {"role": "tree", "nth": 0}}, "wait_after": {"target": {"text": "Level two 1-1", "exact": true, "within": {"role": "tree",
     "nth": 0}}, "state": "visible", "timeout": 15}}}, {"tool": "click", "args": {"target": {"text": "Level two 1-1", "exact":
     true, "within": {"role": "tree", "nth": 0}}, "wait_after": {"target": {"text": "Level three 1-1-1", "exact": true, "within":
@@ -69,7 +69,7 @@ stages:
     three 1-1-1", "exact": true, "within": {"role": "tree", "nth": 0}}, "max_chars": 600}}]'
   evidence: 实际 read 返回本阶段目标内容或属性，不能仅凭 click 成功。
 - goal: 折叠与恢复
-  path: '按照以下已观察定位执行连续操作，到 read 再观察：[{"tool": "click", "args": {"target": {"text": "Level one 1", "exact": true, "within":
+  path: '按照以下已观察定位完整执行本阶段，包含多次 read；阶段结束后统一观察：[{"tool": "click", "args": {"target": {"text": "Level one 1", "exact": true, "within":
     {"role": "tree", "nth": 0}}, "wait_after": {"target": {"text": "Level three 1-1-1", "exact": true, "within": {"role":
     "tree", "nth": 0}}, "state": "hidden", "timeout": 15}}}, {"tool": "read", "args": {"target": {"text": "Level three 1-1-1",
     "exact": true, "within": {"role": "tree", "nth": 0}, "visible": true}, "kind": "count"}}, {"tool": "click", "args": {"target":

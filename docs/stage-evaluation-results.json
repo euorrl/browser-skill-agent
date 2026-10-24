@@ -1,0 +1,733 @@
+{
+  "date": "2026-10-24",
+  "cases": [
+    {
+      "skill": "chinese_encyclopedia_research",
+      "script": {
+        "verified": true,
+        "attempts": 5,
+        "first_attempt_verified": false,
+        "seconds": 18.4,
+        "steps": 22,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "chinese_encyclopedia_research-script-20261024-163632",
+        "model": null,
+        "skill_sha256": "c16afd52409b69f3c47c49bf18aac258645cdd39f84874c4a6e41984f140b45d",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 2,
+        "first_attempt_verified": false,
+        "seconds": 133.2,
+        "steps": 15,
+        "steps_from_trace": false,
+        "calls": 6,
+        "tokens": 82503,
+        "llm_seconds": 117.78,
+        "directory": "chinese_encyclopedia_research-llm-20261024-163321",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "c16afd52409b69f3c47c49bf18aac258645cdd39f84874c4a6e41984f140b45d",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    },
+    {
+      "skill": "element_cn_tabs",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 9.1,
+        "steps": 9,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "element_cn_tabs-script-20261024-162705",
+        "model": null,
+        "skill_sha256": "7fc0695a939fbf5c227fecd95e82cb198545865fded5d2d7503c84f293684e70",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 43.0,
+        "steps": 10,
+        "steps_from_trace": false,
+        "calls": 4,
+        "tokens": 34201,
+        "llm_seconds": 34.88,
+        "directory": "element_cn_tabs-llm-20261024-162750",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "7fc0695a939fbf5c227fecd95e82cb198545865fded5d2d7503c84f293684e70",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 3,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    },
+    {
+      "skill": "element_cn_collapse",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 6.3,
+        "steps": 7,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "element_cn_collapse-script-20261024-162715",
+        "model": null,
+        "skill_sha256": "b5e05f4435d05feaf8cf940d5888dfbd7f94302069649b284e89a88f0c523a5c",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 60.5,
+        "steps": 8,
+        "steps_from_trace": false,
+        "calls": 3,
+        "tokens": 25922,
+        "llm_seconds": 54.56,
+        "directory": "element_cn_collapse-llm-20261024-162833",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "b5e05f4435d05feaf8cf940d5888dfbd7f94302069649b284e89a88f0c523a5c",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 1,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    },
+    {
+      "skill": "element_cn_dialog",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 6.9,
+        "steps": 8,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "element_cn_dialog-script-20261024-162717",
+        "model": null,
+        "skill_sha256": "19fddbee447f16adab3fbdd2e9ebd120011d5ffd905f9a22c84c6f33eb4caf61",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 43.8,
+        "steps": 9,
+        "steps_from_trace": false,
+        "calls": 3,
+        "tokens": 25935,
+        "llm_seconds": 36.22,
+        "directory": "element_cn_dialog-llm-20261024-162934",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "19fddbee447f16adab3fbdd2e9ebd120011d5ffd905f9a22c84c6f33eb4caf61",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 2,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    },
+    {
+      "skill": "element_cn_tree",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 7.8,
+        "steps": 7,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "element_cn_tree-script-20261024-162722",
+        "model": null,
+        "skill_sha256": "3187fdd844cd89eb194fd191c63cae8962c46a8a9071b4719d1220ab670b92d6",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 77.2,
+        "steps": 8,
+        "steps_from_trace": false,
+        "calls": 3,
+        "tokens": 29423,
+        "llm_seconds": 69.21,
+        "directory": "element_cn_tree-llm-20261024-163019",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "3187fdd844cd89eb194fd191c63cae8962c46a8a9071b4719d1220ab670b92d6",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 1,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    },
+    {
+      "skill": "element_cn_pagination",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 5.8,
+        "steps": 9,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "element_cn_pagination-script-20261024-162725",
+        "model": null,
+        "skill_sha256": "211a2a3f3cd7e4aaedcd81afe571b2442f88b2770486dd79b0a911c0793408b5",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 51.3,
+        "steps": 10,
+        "steps_from_trace": false,
+        "calls": 3,
+        "tokens": 26760,
+        "llm_seconds": 43.68,
+        "directory": "element_cn_pagination-llm-20261024-163137",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "211a2a3f3cd7e4aaedcd81afe571b2442f88b2770486dd79b0a911c0793408b5",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 2,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    },
+    {
+      "skill": "vue_cn_navigation",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 8.3,
+        "steps": 13,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "vue_cn_navigation-script-20261024-162731",
+        "model": null,
+        "skill_sha256": "39b09058a2c38fd2e8fb7d2bf92b90a7ddef09b4a7d53edc5da6863a7f89208e",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 103.4,
+        "steps": 13,
+        "steps_from_trace": false,
+        "calls": 4,
+        "tokens": 38622,
+        "llm_seconds": 97.68,
+        "directory": "vue_cn_navigation-llm-20261024-163228",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "39b09058a2c38fd2e8fb7d2bf92b90a7ddef09b4a7d53edc5da6863a7f89208e",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 2,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    },
+    {
+      "skill": "bejson_timestamp_precision",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 7.8,
+        "steps": 17,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "bejson_timestamp_precision-script-20261024-162732",
+        "model": null,
+        "skill_sha256": "afe398a7710191a12bbf4c49982aca8a9aa621766efb272906052ec71e6467eb",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 163.7,
+        "steps": 18,
+        "steps_from_trace": false,
+        "calls": 4,
+        "tokens": 58726,
+        "llm_seconds": 157.51,
+        "directory": "bejson_timestamp_precision-llm-20261024-163412",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "afe398a7710191a12bbf4c49982aca8a9aa621766efb272906052ec71e6467eb",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 1,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    },
+    {
+      "skill": "element_cn_remote_select",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 9.2,
+        "steps": 5,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "element_cn_remote_select-script-20261024-162740",
+        "model": null,
+        "skill_sha256": "54912cfc5014e682850b33b71fb5125e4174068665d2d5e5658e630ff6800517",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 205.1,
+        "steps": 6,
+        "steps_from_trace": false,
+        "calls": 3,
+        "tokens": 35383,
+        "llm_seconds": 187.23,
+        "directory": "element_cn_remote_select-llm-20261024-163532",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "54912cfc5014e682850b33b71fb5125e4174068665d2d5e5658e630ff6800517",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 1,
+        "tool_failures": 1,
+        "tool_failure_details": [
+          {
+            "tool": "fill",
+            "error": "Locator.wait_for: Timeout 10000ms exceeded.\nCall log:\n  - waiting for get_by_role(\"option\", name=\"Alabama\", exact=True).visible to be visible\n"
+          }
+        ]
+      }
+    },
+    {
+      "skill": "chinese_image_file_pipeline",
+      "script": {
+        "verified": true,
+        "attempts": 1,
+        "first_attempt_verified": true,
+        "seconds": 7.9,
+        "steps": 16,
+        "steps_from_trace": false,
+        "calls": 0,
+        "tokens": 0,
+        "llm_seconds": 0,
+        "directory": "chinese_image_file_pipeline-script-20261024-162740",
+        "model": null,
+        "skill_sha256": "aa88f894e2a9cdf964cf1e59b3b38c2b1cfaf7dadac13972a425c9c1ad2a35a7",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 0,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      },
+      "llm": {
+        "verified": false,
+        "attempts": 1,
+        "first_attempt_verified": false,
+        "seconds": 344.3,
+        "steps": 17,
+        "steps_from_trace": true,
+        "calls": 5,
+        "tokens": 41532,
+        "llm_seconds": 338.97,
+        "directory": "chinese_image_file_pipeline-llm-20261024-163658",
+        "model": "glm-5.3-flash",
+        "skill_sha256": "aa88f894e2a9cdf964cf1e59b3b38c2b1cfaf7dadac13972a425c9c1ad2a35a7",
+        "runtime_sha256": "87454c9c969f2d733785bad334b2a97ad3bda471879e943299ccbb5e6812f5c2",
+        "full_multi_read_stages": 1,
+        "tool_failures": 0,
+        "tool_failure_details": []
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "skill": "chinese_encyclopedia_research",
+      "mode": "script",
+      "directory": "chinese_encyclopedia_research-script-20261024-162705",
+      "verified": false,
+      "error": "运行未成功结束",
+      "tokens": 0,
+      "elapsed_seconds": 12.1
+    },
+    {
+      "skill": "chinese_encyclopedia_research",
+      "mode": "script",
+      "directory": "chinese_encyclopedia_research-script-20261024-162846",
+      "verified": false,
+      "error": "AssertionError: 缺少 人工智能 对应条目标签页",
+      "tokens": 0,
+      "elapsed_seconds": 12.4
+    },
+    {
+      "skill": "chinese_encyclopedia_research",
+      "mode": "script",
+      "directory": "chinese_encyclopedia_research-script-20261024-163012",
+      "verified": false,
+      "error": "AssertionError: 缺少 人工智能 对应条目标签页：[{'url': 'https://zh.wikipedia.org/wiki/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD', 'title': '人工智能编辑'}, {'url': 'https://zh.wikipedia.org/wiki/%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0?wprov=srpw1_0', 'title': '机器学习'}]",
+      "tokens": 0,
+      "elapsed_seconds": 10.1
+    },
+    {
+      "skill": "chinese_encyclopedia_research",
+      "mode": "script",
+      "directory": "chinese_encyclopedia_research-script-20261024-163124",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 11.4
+    },
+    {
+      "skill": "chinese_encyclopedia_research",
+      "mode": "script",
+      "directory": "chinese_encyclopedia_research-script-20261024-163632",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 18.4
+    },
+    {
+      "skill": "chinese_encyclopedia_research",
+      "mode": "llm",
+      "directory": "chinese_encyclopedia_research-llm-20261024-162750",
+      "verified": false,
+      "error": "AssertionError: 缺少 人工智能 实际条目正文读取，搜索摘要不能替代",
+      "tokens": 117941,
+      "elapsed_seconds": 461.2
+    },
+    {
+      "skill": "chinese_encyclopedia_research",
+      "mode": "llm",
+      "directory": "chinese_encyclopedia_research-llm-20261024-163321",
+      "verified": true,
+      "error": null,
+      "tokens": 82503,
+      "elapsed_seconds": 133.2
+    },
+    {
+      "skill": "element_cn_tabs",
+      "mode": "script",
+      "directory": "element_cn_tabs-script-20261024-162705",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 9.1
+    },
+    {
+      "skill": "element_cn_tabs",
+      "mode": "llm",
+      "directory": "element_cn_tabs-llm-20261024-162750",
+      "verified": true,
+      "error": null,
+      "tokens": 34201,
+      "elapsed_seconds": 43.0
+    },
+    {
+      "skill": "element_cn_collapse",
+      "mode": "script",
+      "directory": "element_cn_collapse-script-20261024-162715",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 6.3
+    },
+    {
+      "skill": "element_cn_collapse",
+      "mode": "llm",
+      "directory": "element_cn_collapse-llm-20261024-162833",
+      "verified": true,
+      "error": null,
+      "tokens": 25922,
+      "elapsed_seconds": 60.5
+    },
+    {
+      "skill": "element_cn_dialog",
+      "mode": "script",
+      "directory": "element_cn_dialog-script-20261024-162717",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 6.9
+    },
+    {
+      "skill": "element_cn_dialog",
+      "mode": "llm",
+      "directory": "element_cn_dialog-llm-20261024-162934",
+      "verified": true,
+      "error": null,
+      "tokens": 25935,
+      "elapsed_seconds": 43.8
+    },
+    {
+      "skill": "element_cn_tree",
+      "mode": "script",
+      "directory": "element_cn_tree-script-20261024-162722",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 7.8
+    },
+    {
+      "skill": "element_cn_tree",
+      "mode": "llm",
+      "directory": "element_cn_tree-llm-20261024-163019",
+      "verified": true,
+      "error": null,
+      "tokens": 29423,
+      "elapsed_seconds": 77.2
+    },
+    {
+      "skill": "element_cn_pagination",
+      "mode": "script",
+      "directory": "element_cn_pagination-script-20261024-162725",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 5.8
+    },
+    {
+      "skill": "element_cn_pagination",
+      "mode": "llm",
+      "directory": "element_cn_pagination-llm-20261024-163137",
+      "verified": true,
+      "error": null,
+      "tokens": 26760,
+      "elapsed_seconds": 51.3
+    },
+    {
+      "skill": "vue_cn_navigation",
+      "mode": "script",
+      "directory": "vue_cn_navigation-script-20261024-162731",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 8.3
+    },
+    {
+      "skill": "vue_cn_navigation",
+      "mode": "llm",
+      "directory": "vue_cn_navigation-llm-20261024-163228",
+      "verified": true,
+      "error": null,
+      "tokens": 38622,
+      "elapsed_seconds": 103.4
+    },
+    {
+      "skill": "bejson_timestamp_precision",
+      "mode": "script",
+      "directory": "bejson_timestamp_precision-script-20261024-162732",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 7.8
+    },
+    {
+      "skill": "bejson_timestamp_precision",
+      "mode": "llm",
+      "directory": "bejson_timestamp_precision-llm-20261024-163412",
+      "verified": true,
+      "error": null,
+      "tokens": 58726,
+      "elapsed_seconds": 163.7
+    },
+    {
+      "skill": "element_cn_remote_select",
+      "mode": "script",
+      "directory": "element_cn_remote_select-script-20261024-162740",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 9.2
+    },
+    {
+      "skill": "element_cn_remote_select",
+      "mode": "llm",
+      "directory": "element_cn_remote_select-llm-20261024-163532",
+      "verified": true,
+      "error": null,
+      "tokens": 35383,
+      "elapsed_seconds": 205.1
+    },
+    {
+      "skill": "chinese_image_file_pipeline",
+      "mode": "script",
+      "directory": "chinese_image_file_pipeline-script-20261024-162740",
+      "verified": true,
+      "error": null,
+      "tokens": 0,
+      "elapsed_seconds": 7.9
+    },
+    {
+      "skill": "chinese_image_file_pipeline",
+      "mode": "llm",
+      "directory": "chinese_image_file_pipeline-llm-20261024-163658",
+      "verified": false,
+      "error": "ReadTimeout: The read operation timed out",
+      "tokens": 41532,
+      "elapsed_seconds": 344.3
+    }
+  ],
+  "comparison": [
+    {
+      "skill": "element_cn_tabs",
+      "before_calls": 7,
+      "after_calls": 4,
+      "before_tokens": 61861,
+      "after_tokens": 34201,
+      "before_seconds": 111.8,
+      "after_seconds": 43.0,
+      "baseline": "element_cn_tabs-llm-20261024-145035"
+    },
+    {
+      "skill": "element_cn_collapse",
+      "before_calls": 5,
+      "after_calls": 3,
+      "before_tokens": 42373,
+      "after_tokens": 25922,
+      "before_seconds": 64.6,
+      "after_seconds": 60.5,
+      "baseline": "element_cn_collapse-llm-20261024-145035"
+    },
+    {
+      "skill": "element_cn_dialog",
+      "before_calls": 5,
+      "after_calls": 3,
+      "before_tokens": 44573,
+      "after_tokens": 25935,
+      "before_seconds": 86.9,
+      "after_seconds": 43.8,
+      "baseline": "element_cn_dialog-llm-20261024-145455"
+    },
+    {
+      "skill": "element_cn_tree",
+      "before_calls": 4,
+      "after_calls": 3,
+      "before_tokens": 35924,
+      "after_tokens": 29423,
+      "before_seconds": 64.5,
+      "after_seconds": 77.2,
+      "baseline": "element_cn_tree-llm-20261024-145229"
+    },
+    {
+      "skill": "element_cn_pagination",
+      "before_calls": 6,
+      "after_calls": 3,
+      "before_tokens": 56458,
+      "after_tokens": 26760,
+      "before_seconds": 138.0,
+      "after_seconds": 51.3,
+      "baseline": "element_cn_pagination-llm-20261024-145606"
+    },
+    {
+      "skill": "vue_cn_navigation",
+      "before_calls": 6,
+      "after_calls": 4,
+      "before_tokens": 56219,
+      "after_tokens": 38622,
+      "before_seconds": 151.4,
+      "after_seconds": 103.4,
+      "baseline": "vue_cn_navigation-llm-20261024-133248"
+    },
+    {
+      "skill": "bejson_timestamp_precision",
+      "before_calls": 6,
+      "after_calls": 4,
+      "before_tokens": 77856,
+      "after_tokens": 58726,
+      "before_seconds": 251.3,
+      "after_seconds": 163.7,
+      "baseline": "bejson_timestamp_precision-llm-20261024-133613"
+    },
+    {
+      "skill": "element_cn_remote_select",
+      "before_calls": 3,
+      "after_calls": 3,
+      "before_tokens": 32849,
+      "after_tokens": 35383,
+      "before_seconds": 184.4,
+      "after_seconds": 205.1,
+      "baseline": "element_cn_remote_select-llm-20261024-133549"
+    }
+  ],
+  "known_tokens_all_attempts": 516948,
+  "requests_without_usage": 1,
+  "local_regressions": [
+    {
+      "test": "smoke",
+      "exit_code": 0
+    },
+    {
+      "test": "script_mode",
+      "exit_code": 0
+    },
+    {
+      "test": "llm_batches",
+      "exit_code": 0
+    },
+    {
+      "test": "stage_navigation",
+      "exit_code": 0
+    },
+    {
+      "test": "approval",
+      "exit_code": 0
+    }
+  ]
+}

@@ -89,7 +89,7 @@ stages:
     observe_when: 进入条目后先观察，再读取所需正文。
 ```
 
-默认脚本模式忽略 stages，只执行 actions。LLM 根据实际页面划分阶段，返回 stage、success_criteria 和 actions；末尾使用 read/snapshot/locate 作为观察节点。需要新信息时可以提前结束一个里程碑的执行，下一轮继续完成它。固定 --batch-size 参数已移除，只保留 --max-steps 总预算。工具失败、等待失败、导航/标签页变化及获准的关键操作也会提前交回模型；授权拒绝直接结束任务。不要将 finish 写入阶段 actions。
+默认脚本模式忽略 stages，只执行 actions。LLM 根据实际页面划分阶段，返回 stage、success_criteria 和 actions；阶段内可以连续执行多个 read/snapshot/locate，完成计划后统一观察，不会每次读取都调用模型。若下一步需要根据新读取结果决定，模型应在此结束阶段，或在该动作顶层设置 observe_after:true（不放进 args），明确暂停并丢弃尾部计划；下一轮重新规划。固定 --batch-size 参数已移除，只保留 --max-steps 总预算。工具失败、等待失败、导航/标签页变化及获准的关键操作也会提前交回模型；授权拒绝直接结束任务。不要将 finish 写入阶段 actions。
 
 evidence/observe_when 和模型的 success_criteria 都是自然语言建议，不是 Runtime 可执行的断言。具体等待写在 wait_after/wait_for 中；Runtime 不额外调用检查模型。每次阶段之后的正常决策调用同时判断进展并规划后续操作。last_stage 告诉模型上一阶段目标、已执行步数、未执行步数和停止原因。
 
@@ -108,3 +108,27 @@ evidence/observe_when 和模型的 success_criteria 都是自然语言建议，�
 ## 文件参数映射
 
 需要上传下载时，使用 file_params 声明 uploads（文件参数名列表）、upload_dir、download_dir、download_name（各自对应的参数名），仍通过 --param 传值。params 列表中的参数必填，其他映射参数可选，省略时使用文件工具默认目录/名称。没有映射的普通参数不会授权上传文件。完整格式与例子见 [文件管理](files.md)。
+
+`observe_after` 仅用于 LLM 返回的阶段动作，不是 CLI 参数，也不放进工具 args。默认脚本不会请求模型，仍按 actions 顺序执行并在工具或等待失败时停止。
+
+
+例如，已知面板中两个字段的定位器可放在同一阶段连续读取；下例的 ID 是格式示意，实际使用时应替换为已观察到的目标：
+
+```json
+{
+  "stage": "读取结果及状态",
+  "success_criteria": "取得结果文字和选中状态",
+  "actions": [
+    {"tool": "read", "args": {"target": {"id": "result"}}},
+    {"tool": "read", "args": {"target": {"id": "choice"}, "kind": "attribute", "attribute": "aria-selected"}}
+  ]
+}
+```
+
+若下一步必须根据候选列表决定，则在读取后显式暂停：
+
+```json
+{"tool":"snapshot","observe_after":true,"args":{"target":{"role":"listbox","visible":true}}}
+```
+
+这里 `observe_after` 与 `tool`、`args` 同级；如果它后面还排有动作，Runtime 会丢弃这些尾部动作，下一次模型调用重新规划。
