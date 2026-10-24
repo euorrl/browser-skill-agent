@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "browser-skill-agent"
+version = "0.1.0"
+description = "由文字 Skill 驱动的极简浏览器 Agent"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "playwright>=1.51,<2",
+    "httpx>=0.27,<1",
+    "PyYAML>=6,<7",
+    "python-dotenv>=1,<2",
+]
+
+[project.scripts]
+browser-skill-agent = "browser_skill_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

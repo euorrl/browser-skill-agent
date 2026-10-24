@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>动态组件工具验证</title>
+<body>
+<label>排序<select aria-label="排序"><option value="asc">价格升序</option><option value="desc">价格降序</option></select></label>
+<button id="open" aria-haspopup="listbox" aria-expanded="false">筛选品牌</button>
+<div id="panel" hidden><label>品牌搜索<input id="query"></label><div role="listbox" aria-label="品牌"></div></div>
+<p role="status">未选择</p>
+<button id="delayed">加载控件</button><label>延迟字段<input id="later" disabled></label>
+<label>启用筛选<input type="checkbox"></label>
+<article aria-label="商品甲"><button>加入</button><span>0</span></article>
+<article aria-label="商品乙"><button>加入</button><span>0</span></article>
+<iframe title="嵌入表单" srcdoc='<label>框架字段<input></label>'></iframe>
+<button id="confirm">确认操作</button><p id="answer"></p>
+<label>附件<input type="file" id="file"></label>
+<a download="sample.txt" id="download">下载示例</a>
+<script>
+document.querySelector('#open').onclick = e => { document.querySelector('#panel').hidden=false; e.target.setAttribute('aria-expanded','true'); };
+document.querySelector('#query').oninput = e => {
+  const query=e.target.value;
+  setTimeout(() => {
+    const list=document.querySelector('[role=listbox]'); list.replaceChildren();
+    if ('ForgeFlex'.includes(query)) {
+      const option=document.createElement('button'); option.setAttribute('role','option'); option.textContent='ForgeFlex';
+      option.onclick=() => { document.querySelector('[role=status]').textContent='已选择 ForgeFlex'; document.querySelector('#panel').hidden=true; };
+      list.append(option);
+    }
+  },150);
+};
+document.querySelector('#delayed').onclick=() => setTimeout(() => document.querySelector('#later').disabled=false,200);
+document.querySelectorAll('article button').forEach(b => b.onclick=() => b.nextElementSibling.textContent='1');
+document.querySelector('#confirm').onclick=() => document.querySelector('#answer').textContent=confirm('继续吗？') ? '已确认' : '已取消';
+document.querySelector('#download').href=URL.createObjectURL(new Blob(['test download'],{type:'text/plain'}));
+</script></body></html>
