@@ -7,6 +7,9 @@
 | `cli.py` | 解析参数、加载模型配置、启动并关闭 Edge、汇总输出 |
 | `browser_display.py` | 通过 CDP 控制本任务窗口位置，结束后显示同一会话 |
 | `skill.py` | 解析 YAML 和 Markdown 正文，绑定字符串参数 |
+| `recording/recorder.py` | 手动录制浏览器、控制页、页面事件与下载生命周期 |
+| `recording/storage.py` | 原始事件落盘与操作合并 |
+| `recording/browser.js` | 页面及 iframe 中的用户事件与 DOM 状态捕获 |
 | `runtime.py` | 顺序脚本或阶段批次循环；模型 API 调用、读取证据和 Token 累计 |
 | `approval.py` | 工具执行前的规则判断、人工/AI 授权与拒绝记录 |
 | `output.py` | 中文进度、结果显示及 JSON 输出 |
@@ -95,3 +98,7 @@ API usage 中的 prompt_tokens、completion_tokens、total_tokens 按请求累�
 控件准备的多个检查各有超时，不能把“默认 10 秒”理解为整个动作的总耗时上限。wait_for 最多 30 秒；wait 最多 5 秒。LLM HTTP 客户端配置 120 秒网络超时，不是整个任务的总时限。
 
 readiness 在模型观察前最多等待 2 秒，尝试找到 200 毫秒 DOM 安静期和非 busy 状态；它不能判断延迟业务请求是否全部完成。wait_response 最多等待 30 秒收到匹配响应，再读取响应体并执行 wait_after；响应体读取不是同一个 30 秒总预算。等待业务结果应优先使用可区分新旧状态的明确条件。
+
+## 录制入口
+
+`record` 子入口启动独立的可见浏览器与本地控制页，不经过 Skill Runtime 或模型。控制命令只接受来自控制页主框架的调用，任务页面的事件只写入所属录制会话。完成、放弃和中断状态与任务执行成功不是同一含义。参数提取和 Skill 生成尚未接入，详见 [录制指南](recording.md)。

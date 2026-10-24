@@ -31,7 +31,11 @@ def parameter(text: str) -> tuple[str, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="执行文字浏览器 Skill")
+    if len(sys.argv) > 1 and sys.argv[1] == "record":
+        from .recording.recorder import main as record_main
+        return record_main(sys.argv[2:])
+    parser = argparse.ArgumentParser(description="执行文字浏览器 Skill",
+                                     epilog="录制用户操作：python -m browser_skill_agent record [--url 起始网址]")
     parser.add_argument("skill", help="SKILL.md 文件路径")
     parser.add_argument("--param", action="append", type=parameter, default=[],
                         help="任务参数，格式为 参数名=参数值，可重复指定")

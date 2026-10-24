@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>浏览器操作录制</title><style>
+:root{font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#172431;background:#f4f7fa}*{box-sizing:border-box}body{margin:0}main{max-width:880px;margin:60px auto;padding:0 24px}header{display:flex;justify-content:space-between;align-items:center;color:#506274;font-size:14px}h1{font-size:34px;margin:28px 0 12px}p{line-height:1.8;color:#536678}section{background:white;border:1px solid #dce4eb;border-radius:16px;padding:28px;margin:24px 0;box-shadow:0 5px 24px #20364d08}label{display:block;font-weight:600;margin-bottom:10px}input{width:100%;font:inherit;padding:13px;border:1px solid #abbccc;border-radius:8px}button{font:inherit;padding:12px 20px;border:1px solid #c4d1dc;border-radius:8px;background:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}.primary{background:#1464c0;color:white;border-color:#1464c0}.danger{color:#a52e26}.row{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}.hint{background:#eef5ff;padding:16px;border-radius:10px;font-size:14px;color:#345479}.badge{padding:7px 12px;background:#e7eef5;border-radius:20px}#status{font-size:23px;margin:0 0 8px}#folder{word-break:break-all;font-family:Consolas,monospace;font-size:13px}li{margin:8px 0;color:#40556a}summary{cursor:pointer;color:#1464c0}#error{color:#b22b24;white-space:pre-wrap}dialog{max-width:520px;border:1px solid #dce4eb;border-radius:14px;padding:28px}dialog::backdrop{background:#182b4255}[hidden]{display:none!important}footer{font-size:13px;color:#6b7b8c;margin-bottom:32px}code{background:#eef2f6;padding:2px 5px;border-radius:3px}
+</style></head><body><main>
+<header><strong>Browser Skill Agent</strong><span class="badge">本地录制 · 不调用 LLM</span></header>
+<h1>把一次操作，完整记录下来</h1>
+<p>开始录制后，像平时一样操作浏览器。完成任务后回到此页，结束并保存。</p>
+<div class="hint">请尽量完整、连贯地演示一次任务，减少无关操作和反复尝试，有助于后续生成更准确、稳定的 Skill。正常等待页面、上传和下载完成即可，无需加快操作。操作有误时可重新开始。</div>
+<section><label for="url">起始网址</label><input id="url" type="url" placeholder="https://example.com" autocomplete="off">
+<div class="row"><button id="start" class="primary">开始录制</button><button id="stop" hidden>结束并保存</button><button id="restart" class="danger" hidden>重新开始</button></div><p id="error" role="alert"></p></section>
+<section id="record" hidden><h2 id="status" role="status">正在录制</h2><p id="counts"></p><p id="instruction"></p><p id="folder"></p><ul id="downloads"></ul><details><summary>查看最近操作</summary><ol id="actions"></ol></details></section>
+<footer>记录保存在本项目的 <code>data/recordings/</code>；下载保存到 <code>files/recordings/</code>。密码输入值不会保存，不录截图或视频。关闭此控制页会退出本次录制浏览器。</footer>
+<dialog id="restartDialog"><h2>重新开始录制？</h2><p>本次记录将标记为已放弃，不用于后续生成 Skill，并返回起始页面。登录会话会保留。已在网站完成的上传、提交或购买不会撤销。</p><div class="row"><button id="continue">继续当前录制</button><button id="confirmRestart" class="primary">重新开始</button></div></dialog>
+<dialog id="webDialog"><h2 id="webDialogTitle">网页弹窗</h2><p id="webMessage"></p><input id="promptValue" aria-label="网页弹窗输入" autocomplete="off"><div class="row"><button id="dismissDialog">取消</button><button id="acceptDialog" class="primary">确定</button></div></dialog>
+<script>
+const el=id=>document.getElementById(id);let busy=false;
+const kinds={fill:'填写',click:'点击',double_click:'双击',select:'选择选项',set_checked:'勾选',press:'按键',upload:'选择上传文件',dialog:'网页弹窗'};
+function render(s){
+ const running=s.state==='recording',finishing=s.state==='finishing';
+ el('error').textContent=s.error||'';el('record').hidden=s.state==='idle';
+ el('start').hidden=running||finishing;el('stop').hidden=!running;el('restart').hidden=!running&&!finishing;
+ el('url').disabled=running||finishing;el('start').textContent=s.state==='completed'?'开始新的录制':'开始录制';
+ for(const id of ['start','stop','restart'])el(id).disabled=busy;
+ el('status').textContent=({recording:'正在录制',finishing:'正在保存，等待下载完成…',completed:'录制完成，记录已保存',interrupted:'录制已中断，已有记录保留',abandoned:'本次记录已放弃'})[s.state]||'';
+ el('counts').textContent=s.id?`${s.action_count} 个操作 · ${s.page_count} 个页面 · 选择文件 ${s.uploads} 次 · 下载 ${(s.downloads||[]).length} 次`:'';
+ el('instruction').textContent=running?'请切换到录制网页操作，完成后回到此页。':finishing?'已记录的下载会继续保存，请暂时不要关闭浏览器。':'这些是操作记录，尚未生成参数或 Skill。';
+ el('folder').textContent=s.folder?'记录目录：'+s.folder:'';
+ el('downloads').replaceChildren(...(s.downloads||[]).map(d=>{const li=document.createElement('li');li.textContent=`${d.suggested_filename}：${({downloading:'下载中',completed:'已保存',failed:'失败',cancelled:'已取消'})[d.status]||d.status}`;return li;}));
+ el('actions').replaceChildren(...(s.actions||[]).map(a=>{const li=document.createElement('li');li.textContent=(kinds[a.kind]||a.kind)+' · '+(a.name||'页面元素');return li;}));
+ if(s.dialog){el('webMessage').textContent=s.dialog.message;el('promptValue').hidden=s.dialog.type!=='prompt';if(!el('webDialog').open)el('webDialog').showModal();}
+ else if(el('webDialog').open){el('webDialog').close();el('promptValue').value='';}
+}
+async function command(name,value){if(busy)return;busy=true;for(const id of ['start','stop','restart'])el(id).disabled=true;el('error').textContent='';el('instruction').textContent='正在处理…';try{render(await window.__bsaControl(name,value));}catch{el('error').textContent='录制器连接已关闭，请查看终端。';}finally{busy=false;for(const id of ['start','stop','restart'])el(id).disabled=false;}}
+el('start').onclick=()=>command('start',el('url').value);el('stop').onclick=()=>command('stop');
+el('restart').onclick=()=>el('restartDialog').showModal();el('continue').onclick=()=>el('restartDialog').close();
+el('confirmRestart').onclick=()=>{el('restartDialog').close();command('restart');};
+el('acceptDialog').onclick=()=>command('dialog',{accept:true,text:el('promptValue').value});
+el('dismissDialog').onclick=()=>command('dialog',{accept:false});
+el('webDialog').addEventListener('cancel',e=>{e.preventDefault();command('dialog',{accept:false});});
+setInterval(async()=>{if(!busy)try{render(await window.__bsaControl('status'));}catch{}},700);
+</script></main></body></html>

@@ -31,6 +31,18 @@ python -m venv .venv
 
 也可使用 `.\.venv\Scripts\browser-skill-agent.exe`，参数相同。可编辑安装后，修改源码无需重新安装。
 
+## 录制用户操作
+
+从真实操作开始沉淀流程，先录制，再进入后续 Skill 生成阶段：
+
+```powershell
+.\.venv\Scripts\python -m browser_skill_agent record
+```
+
+输入网址 → 开始录制 → 正常操作网页 → 回到控制页结束并保存。支持带确认的“重新开始”，保留登录会话并隔离旧记录；网页已经发生的操作不会撤销。完整、连贯的演示有助于后续生成 Skill，不必为了流畅而加快操作。
+
+记录保存到 `data/recordings/`，下载保存到 `files/recordings/`。当前只完成录制与记录，不调用 LLM，也不自动提取参数或生成 Skill。详见 [录制指南](docs/recording.md)。
+
 ## 命令行参数
 
 ```powershell
