@@ -67,7 +67,7 @@ class Observation:
             return locator.is_checked()
         if kind == "attribute":
             if attribute not in ("href", "title", "aria-expanded", "aria-selected", "aria-label",
-                                 "aria-controls", "data-test", "data-testid", "type", "name"):
+                                 "aria-controls", "aria-current", "aria-disabled", "disabled", "data-test", "data-testid", "type", "name"):
                 raise ValueError("不支持读取该属性")
             return locator.get_attribute(attribute)
         if kind == "options":

@@ -24,6 +24,7 @@ FIELD_NAMES = {
     "state": "等待状态", "timeout": "超时秒数", "seconds": "秒数",
     "wait_after": "操作后等待", "kind": "读取类型", "checked": "勾选",
     "wait_response": "等待响应",
+    "requires_approval": "要求授权",
 }
 
 
@@ -37,6 +38,11 @@ def progress(message):
     print(message, file=sys.stderr, flush=True)
 
 
+def model_progress(title, detail):
+    """使用纯文本分隔，终端和重定向日志均清晰，不污染 JSON stdout。"""
+    progress(f"\n{'=' * 64}\n【LLM · {title}】\n{detail}\n{'=' * 64}")
+
+
 def describe(value):
     if isinstance(value, dict):
         return "；".join(f"{FIELD_NAMES.get(key, key)}：{describe(item)}" for key, item in value.items())
@@ -46,13 +52,15 @@ def describe(value):
 
 
 def action_progress(turn, maximum, name, args):
-    progress(f"[第 {turn}/{maximum} 轮] {TOOL_NAMES.get(name, '未知工具')}（{name}）")
+    progress(f"[操作步骤 {turn}/{maximum}] {TOOL_NAMES.get(name, '未知工具')}（{name}）")
     if args and name != "finish":
         progress(f"  操作信息：{compact(describe(args))}")
 
 
 def result_progress(result, scripted=False):
-    if not result.get("ok"):
+    if result.get("approval_denied"):
+        progress(f"  未获授权，操作未执行，停止任务：{compact(result.get('error'))}")
+    elif not result.get("ok"):
         progress(f"  操作报错：{compact(result.get('error', '未知原因'))}")
         progress("  已停止后续步骤；报错不代表操作一定未生效。" if scripted else "  将重新观察页面；报错不代表操作一定未生效。")
     elif result.get("after_wait", {}).get("ok") is False:
@@ -67,15 +75,28 @@ def print_result(result, as_json=False):
     if as_json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
-    print(f"\n运行结果：{STATUS_NAMES.get(result['status'], result['status'])}")
+    print(f"\n{'=' * 64}\n【任务结果】{STATUS_NAMES.get(result['status'], result['status'])}\n{'=' * 64}")
     if "turns" in result:
-        label = "执行步数" if result.get("mode") == "script" else "决策轮数"
+        label = "脚本步骤数（含失败或被拒绝步骤）" if result.get("mode") == "script" else "LLM 执行规划调用次数"
         print(f"{label}：{result['turns']}")
+    if "steps" in result:
+        maximum = f" / {result['max_steps']}" if 'max_steps' in result else ""
+        print(f"操作预算用量：{result['steps']}{maximum} 步")
+        if "action_steps" in result:
+            print(f"  工具操作尝试 {result['action_steps']} 次 + 结束指令 {result['finish_steps']} 次 + 无效计划 {result['invalid_plans']} 次")
+            print("  工具操作尝试含失败或被拒绝的步骤；入口导航不占预算。")
     if "elapsed_seconds" in result:
         print(f"总耗时：{result['elapsed_seconds']:.1f} 秒")
     if result.get("url"):
-        print(f"最后页面：{result['url']}")
-    print(f"结果说明：\n{result.get('message', '未提供说明')}")
+        print(f"\n最后页面：\n{result['url']}\n")
+    if "approval" in result:
+        approval = result["approval"]
+        decisions = approval["decisions"]
+        label = {"human": "人工确认", "ai": "AI 审核", "allow": "全部允许"}.get(approval['mode'], approval['mode'])
+        print(f"授权模式：{label}；触发审核 {len(decisions)} 次，拒绝 {sum(not item['approved'] for item in decisions)} 次")
+        if not decisions and approval['mode'] != "allow":
+            print("  本次没有操作触发授权提示。")
+    print(f"\n结果说明：\n{result.get('message', '未提供说明')}\n")
     for item in result.get("outputs", []):
         data = item["data"]
         print(f"\n{item['title']}：\n{data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=2)}")
@@ -83,6 +104,8 @@ def print_result(result, as_json=False):
             print(f"来源：{item['url']}")
     usage = result.get("usage")
     if usage is not None:
+        if usage["requests"]:
+            print(f"模型请求次数（含 AI 授权审核）：{usage['requests']}")
         if usage["requests"] == 0:
             print("Token 消耗：0（未请求 LLM）")
         elif usage["reported_requests"] == 0:

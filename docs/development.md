@@ -6,7 +6,11 @@
 
 ```powershell
 .\.venv\Scripts\python tests/smoke.py
+.\.venv\Scripts\python tests/llm_batches.py
+.\.venv\Scripts\python tests/stage_navigation.py
+.\.venv\Scripts\python tests/approval.py
 .\.venv\Scripts\python tests/browser_tools.py
+.\.venv\Scripts\python tests/file_paths.py
 .\.venv\Scripts\python tests/dynamic_page.py
 .\.venv\Scripts\python tests/script_mode.py
 .\.venv\Scripts\python tests/browser_lifecycle.py
@@ -16,6 +20,9 @@ git diff --check
 
 | 脚本 | 覆盖内容 |
 | --- | --- |
+| llm_batches.py | 可变长度阶段、未知组件观察、失败和读取/导航边界、总预算、历史证据及上下文裁剪 |
+| stage_navigation.py | 预期导航及新建/切换标签页连续读取，URL 不符、等待缺失/失败和意外弹窗中断 |
+| approval.py | 三种授权策略、拒绝无副作用、对象变化、批次停止和审核 Token |
 | smoke.py | Skill 参数绑定、模型 HTTP 适配、工具错误回传和执行次数上限 |
 | browser_tools.py | 原生/自定义下拉、容器定位、iframe、标签页、弹窗、上传下载 |
 | dynamic_page.py | DOM 替换、隐藏副本、延迟启用、遮挡、列表重排及等待失败不重放 |
@@ -25,7 +32,7 @@ git diff --check
 
 后两项会短暂显示测试窗口，测试结束自行关闭。测试不是产品运行时的独立业务检查器，也不能保证任意线上网站或模型均可完成任务。
 
-在线验证应显式运行对应 Skill。默认脚本不消耗模型 Token；`--llm` 会调用真实服务。已在开发过程中验证三个内置 Skill 的脚本流程；页面、库存、网络和模型响应可能变化，历史耗时不作为性能保证。
+在线验证应显式运行对应 Skill。默认脚本不消耗模型 Token；`--llm` 或 `--approval ai` 会调用真实服务。默认关键操作需要人工确认，无人值守测试需明确选择授权策略。新增中文 Skill 的真实脚本/LLM 验证见 chinese-skills-validation.md；页面、库存、网络和模型响应可能变化，历史耗时不作为性能保证。
 
 ## 修改约定
 
@@ -45,10 +52,14 @@ git diff --check
 ```text
 feat: 实现 Skill 驱动的浏览器执行器
 
-- 支持默认脚本执行和可选 LLM 决策，统计服务端 Token 用量
+- 支持默认脚本和 LLM 阶段批次执行，保留读取证据并统计 Token 用量
 - 提供语义定位、动态等待、多标签页及文件操作工具
 - 支持三种窗口显示方式、结束后保留及独立浏览器会话
-- 添加三个参数化 Skill、中文文档和本地浏览器测试
+- 添加中文网站 Skill、中文文档和本地浏览器测试
 ```
 
 提交前检查 diff、测试结果和暂存范围。是否暂存、提交和推送由维护者决定；文档中的示例不是自动执行指令。
+
+file_paths.py 验证上传范围、授权拒绝、文件编号、下载命名优先级、同名避让及实际 CLI 参数；不调用模型。files/ 与 data/ 一样不提交。
+
+在线验证需显式运行 tests/live_chinese_skills.py --skill 名称 --mode script 或 llm；后者读取 .env 并产生真实 Token 消耗。它使用项目 Runtime、真实网站和 allow 授权，另核对页面/下载证据，不是产品运行时新增检查模块。详细命令见 [中文网站验证](chinese-skills-validation.md)。

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 from browser_skill_agent.tools import BrowserTools
+from browser_skill_agent.tools.files import FileOptions
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +16,9 @@ def verify():
         browser = pw.chromium.launch(channel="msedge", headless=True)
         try:
             page = browser.new_context().new_page()
-            tools = BrowserTools(page)
+            file = Path(temp) / "upload.txt"
+            file.write_text("测试", encoding="utf-8")
+            tools = BrowserTools(page, file_options=FileOptions(upload_files=[file], download_dir=Path(temp) / "downloads"))
 
             def call(name, **args):
                 result = tools.execute(name, args)

@@ -221,6 +221,7 @@ __marimo__/
 
 # Browser login profile
 data/
+files/
 
 # README 中重定向生成的本地运行结果
 /result.json

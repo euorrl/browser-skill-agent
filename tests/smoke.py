@@ -12,8 +12,9 @@ from browser_skill_agent.tools import BrowserTools
 root = Path(__file__).resolve().parents[1]
 # 正式 Skill 均应保留能力描述，且能绑定任务参数。
 for name, params in [
-    ('toolshop_filter_cart', dict(keyword='pliers', category='Pliers', product_name='Slip Joint Pliers', quantity='2')),
-    ('compare_python_releases', dict(version_a='3.13.7', version_b='3.12.10', package_name='Windows installer (64-bit)')),
+    ('chinese_encyclopedia_research', dict(topic_a='人工智能', topic_b='机器学习')),
+    ('element_cn_remote_select', dict(query='al', choice='Alabama')),
+    ('chinese_image_file_pipeline', dict(file_a='sample-a.png', file_b='sample-b.png')),
 ]:
     path = str(root / 'skills' / name / 'SKILL.md')
     loaded = load_skill(path, params)

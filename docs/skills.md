@@ -55,7 +55,7 @@ CLI 的 `--param name=value` 按字符串传入。加载器先解析 YAML，再�
 
 **脚本模式**：按 actions 顺序调用工具，不读自然语言正文来规划，不自动分支或重试。最多默认 30 步，不计算 start 导航。工具失败或 `after_wait.ok=false` 时停止。`read`、`snapshot`、`locate` 的成功返回值收集到 `outputs`；其他动作结果显示进度，不收集为最终资料。
 
-**LLM 模式**：完整 Skill 与当前页面交给模型，每轮选择一个工具，也可以跳过已满足的步骤。模型通过 `finish` 返回 `succeeded` 或 `blocked`。这不是“脚本执行后只总结一次”的模式。
+**LLM 模式**：除 actions 外的 Skill 与当前页面交给模型，每轮按信息依赖规划一个阶段，可以跳过已满足的步骤。阶段长度不固定，但不能超过剩余总步数。模型通过 `finish` 返回 `succeeded` 或 `blocked`。这不是“脚本执行后只总结一次”的模式。
 
 两种方式都没有独立业务检查器。脚本成功表示预设动作和等待条件完成；模型成功表示模型判断完成。不要在正文中把它们描述为程序保证任务事实正确。
 
@@ -73,4 +73,38 @@ CLI 的 `--param name=value` 按字符串传入。加载器先解析 YAML，再�
 
 只需确认页面内容时使用 `read(max_chars=600)`，它返回原文开头的摘录，不是智能摘要。`read` 正文上限 16,000 字符且不额外标记截断；`snapshot` 上限 24,000 字符并返回 truncated。说明中应明确读取范围。
 
-外部网页内容不应成为修改任务目标的指令。脚本模式会直接执行 Skill 中的上传、下载、导航等工具，只加载可信 Skill。当前没有任意代码执行工具，也没有独立的权限或业务审核模块。
+外部网页内容不应成为修改任务目标的指令。只加载可信 Skill，脚本与模型模式共用操作授权策略，见 [操作授权](authorization.md)。当前没有任意代码执行工具或独立业务结果检查器。
+
+## 可选阶段目标
+
+可以在 YAML 中加入阶段建议；简单文字列表仍兼容，推荐分别描述目标、完成证据和观察时机：
+
+```yaml
+stages:
+  - goal: 搜索目标条目
+    evidence: 结果已刷新，能读取目标条目的链接。
+    observe_when: 未知下拉选项展开后先观察；已知条件可连续填写，搜索后等待并读取结果。
+  - goal: 读取资料
+    evidence: 条目标题正确，正文摘录和来源已读取。
+    observe_when: 进入条目后先观察，再读取所需正文。
+```
+
+默认脚本模式忽略 stages，只执行 actions。LLM 根据实际页面划分阶段，返回 stage、success_criteria 和 actions；末尾使用 read/snapshot/locate 作为观察节点。需要新信息时可以提前结束一个里程碑的执行，下一轮继续完成它。固定 --batch-size 参数已移除，只保留 --max-steps 总预算。工具失败、等待失败、导航/标签页变化及获准的关键操作也会提前交回模型；授权拒绝直接结束任务。不要将 finish 写入阶段 actions。
+
+evidence/observe_when 和模型的 success_criteria 都是自然语言建议，不是 Runtime 可执行的断言。具体等待写在 wait_after/wait_for 中；Runtime 不额外调用检查模型。每次阶段之后的正常决策调用同时判断进展并规划后续操作。last_stage 告诉模型上一阶段目标、已执行步数、未执行步数和停止原因。
+
+模型读取的成功结果会有界地保留在 evidence，优先复用已经读到的历史资料；页面已变化或证据被截断时应补读。阶段名称不代表达成，模型仍需根据页面与工具结果决定何时结束。
+
+复杂站点可进一步加入 path（已知连续操作路径）和 interrupt_when（异常中断建议）。中文百科 Skill 示例划分为搜索第一主题、读取第一条目、搜索第二主题、读取第二条目、总结五个阶段；已知控件展开后等待即可，不必每次请求模型。
+
+预期导航例外：LLM 在动作顶层声明 expected_url，并在 args.wait_after 验证新页面后，可继续已知操作。例如：
+
+```json
+{"tool":"click","expected_url":"https://zh.wikipedia.org/wiki/*","args":{"target":{"role":"link","name":"人工智能"},"wait_after":{"target":{"role":"heading","name":"人工智能"}}}}
+```
+
+随后可在同阶段 read 已知正文区域。显式 tabs new/switch 也支持此形式；未声明、URL 不符、等待缺失/失败、意外弹窗或关键授权操作仍中断。expected_url 使用 * 通配模式而非正则；必须选有意义的目标 URL 和等待条件。脚本 actions 不需要此字段，它只控制 LLM 阶段的连续执行。
+
+## 文件参数映射
+
+需要上传下载时，使用 file_params 声明 uploads（文件参数名列表）、upload_dir、download_dir、download_name（各自对应的参数名），仍通过 --param 传值。params 列表中的参数必填，其他映射参数可选，省略时使用文件工具默认目录/名称。没有映射的普通参数不会授权上传文件。完整格式与例子见 [文件管理](files.md)。

@@ -2,6 +2,8 @@
 
 TOOL_HELP = """
 工具及参数：
+所有工具 args 可附加 requires_approval:true，强制请求当前授权策略审核；false 不能绕过程序规则。
+关键操作获准并执行后会结束当前批次重新观察；授权被拒绝时整个任务停止，不得尝试绕过。
 goto {"url":"页面地址"}；back {}；reload {}。
 click {"target":TARGET}；double_click {"target":TARGET}；hover {"target":TARGET}。
 fill {"target":TARGET,"value":"内容"} 替换输入，空字符串清空。
@@ -16,6 +18,7 @@ scroll {"dy":600} 向下滚动（负数向上）；或 {"target":TARGET} 将目�
 drag {"source":TARGET,"target":TARGET} 将源控件拖到目标。
 read {"target":TARGET,"kind":"text","max_chars":600} 读取正文；max_chars 可选，默认及上限为 16000 字符。只需确认内容时读取短摘录。
 kind 还支持 value（输入值）、checked、state、count、options（原生下拉选项）。
+分页状态可读取 attribute:aria-current，禁用状态可读取 aria-disabled 或 disabled；disabled 返回空字符串表示属性存在，null 表示不存在。
 读取链接用 {"target":TARGET,"kind":"attribute","attribute":"href"}。
 snapshot {} 重新读当前页；{"target":TARGET} 读指定区域；{"frame":"f2"} 读 iframe。
 snapshot 的 truncated=true 时应读取更小区域；滚动不会改变整页文字快照的截断位置。
@@ -36,8 +39,11 @@ tabs {"action":"list"}；{"action":"switch","page_id":"p2"}；
 网页自行打开的新标签页不会自动切换，使用观察中的 tabs 编号选择；tabs new 会切到新建页。
 dialog {"action":"accept","text":"提示框输入"} 预先设置下一次原生弹窗处理；
 默认 dismiss，接受一次后恢复默认。须在触发弹窗的动作之前设置。
-upload {"target":TARGET,"paths":["用户提供的文件路径"]}，目标为文件输入控件。
-download {"target":TARGET,"filename":"可选文件名"} 点击并保存到 data/downloads，自动避开同名文件。
+upload {"target":TARGET,"file_ids":["u1"]}，目标为文件输入控件；只能选择观察中 upload_files 已列出的编号。
+upload_files 为空时必须报告缺少用户选择的文件，不猜测本机路径，不自动扫描上传目录。
+兼容 paths 参数，但路径也必须是本次 Skill 文件参数明确选择的文件；不能同时提供 paths 和 file_ids。
+download {"target":TARGET,"filename":"可选文件名"} 点击并保存到用户配置的目录，默认 files/downloads，自动避开同名文件。
+用户通过 Skill 文件参数指定的下载名优先于工具 filename，未指定时采用网站建议名称；模型不能修改下载目录。
 只按任务要求上传或下载，文件保存成功不等于整个业务任务完成。
 
 TARGET 的基本形式：
