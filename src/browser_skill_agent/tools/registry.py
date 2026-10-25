@@ -3,6 +3,7 @@
 from inspect import signature
 
 from .actions import Actions
+from .auth import Authentication
 from .files import Files, FileOptions
 from .navigation import Navigation
 from .observe import Observation
@@ -11,6 +12,7 @@ from .waiting import Waiting
 from .help import TOOL_HELP
 
 TOOL_GROUPS = (
+    (Authentication, ("login",)),
     (Actions, ("click", "double_click", "hover", "fill", "type_text", "press", "select", "set_checked", "scroll", "drag")),
     (Navigation, ("goto", "back", "reload", "tabs", "dialog")),
     (Observation, ("read", "snapshot", "locate")),
@@ -39,18 +41,41 @@ class BrowserTools:
         return self.session.target(target)
 
     def observe(self):
+        handler = getattr(self.session, "login_handler", None)
+        if handler: handler.ensure()
         observation = self.observation.observe()
         observation["upload_files"] = self.files.options.available()
-        return observation
+        return handler.redact(observation) if handler else observation
 
     def read(self, target, kind="text", attribute=None):
         return self.observation.read(target, kind, attribute)
 
     def execute(self, name, args):
+        handler = getattr(self.session, "login_handler", None)
+        if not handler:
+            return self._execute(name, args)
+        try:
+            if name != "login":handler.ensure()
+            result = self._execute(name, args)
+            if name != "login" and handler.ensure():
+                # 只重新检查结果等待，绝不自动重放可能已提交的点击或上传。
+                if args.get("wait_after"):
+                    waited = self._execute("wait_for", args["wait_after"])
+                    result["after_wait"] = {"ok": waited["ok"], **({"error": waited["error"]} if not waited["ok"] else {})}
+                result["login_resumed"] = True
+            return handler.redact(result)
+        except Exception as exc:
+            return {"ok": False, "error": handler.redact(str(exc)), "login_blocked": True}
+
+    def _execute(self, name, args):
         try:
             if name not in self._tools:
                 raise ValueError(f"未知工具：{name}")
             args = dict(args)
+            if name == "read" and args.get("target"):
+                locator = self.target(args["target"])
+                if locator.evaluate_all("els => els.some(el => el.matches('input[type=password]'))"):
+                    raise ValueError("密码字段禁止通过读取工具访问")
             required = args.pop("requires_approval", False)
             if not isinstance(required, bool):
                 raise ValueError("requires_approval 必须为布尔值")

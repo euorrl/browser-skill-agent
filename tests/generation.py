@@ -161,6 +161,28 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(report["evidence_map"][0]["source_actions"], ["a1"])
         self.assertIn("a99", report["unresolved"][0]["issue"])
 
+    def test_example_field_placement(self):
+        value = draft()
+        value['skill']['example_params'] = dict(value['example_params'])
+        value['skill']['example_params_note'] = None
+        validate(value)
+        self.assertNotIn('example_params', value['skill'])
+        self.assertNotIn('example_params_note', value['skill'])
+        value = draft()
+        value['skill']['example_params'] = {'query': 'conflicting'}
+        with self.assertRaisesRegex(ValueError, 'example_params'):
+            validate(value)
+
+    def test_unidentified_click_blocks_partial_draft(self):
+        self.write("actions.json", [{"id": "a1", "kind": "click", "target": {"tag": "path", "candidates": []}}])
+        class FakeModel:
+            usage = {}
+            def request(self, state, prompt): return draft()
+        folder, report = generate(self.record, FakeModel(), self.root / "missing")
+        self.assertEqual(report["status"], "needs_evidence")
+        self.assertEqual(report["blocking_recording_gaps"], ["a1"])
+        self.assertFalse(report["validated"])
+
     def test_one_format_correction_and_failed_diagnostic(self):
         invalid = draft()
         invalid["skill"]["actions"][0]["args"]["visible"] = True
@@ -182,6 +204,9 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(model.calls, 2)
         self.assertEqual(len(list((self.root / "failed").glob("*/generation.json"))), 1)
         self.assertEqual(list((self.root / "failed").glob("*/SKILL.md")), [])
+        diagnostic = json.loads(next((self.root / "failed").glob("*/generation.json")).read_text(encoding="utf-8"))
+        self.assertEqual(len(diagnostic["attempts"]), 2)
+        self.assertTrue(all("response" in attempt and "error" in attempt for attempt in diagnostic["attempts"]))
 
 
 if __name__ == "__main__":

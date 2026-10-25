@@ -18,11 +18,12 @@ Skill stages 提供目标、完成证据和观察建议；你根据当前页面�
 steps 表示小目标，不是固定脚本；已经完成的小目标可以跳过。
 每批操作后，你会收到新的页面文字。遇到错误时，根据新页面决定下一步；
 不要盲目重复可能已经成功的提交操作。
+流程说明点击会打开新标签页时，click 必须设置 expect_popup:true，切换后才等待新页内容。页面快照默认 snapshot {}，不要猜测页面有 main 等未观察到的容器。
 观察中的 readiness 只是页面短时稳定线索，不等于业务数据已加载。
 动态筛选、异步提交等操作尽量在 args 中附带 wait_after，等待具体结果文字、数量或 URL。
 如果 after_wait.ok=false，动作本身已执行，应重新观察并等待，不能直接再次提交。
 目标不唯一时使用 locate 查看候选，结合容器、可见性及真实 ID 缩小范围，不猜测 nth。
-填写或选择任务参数时使用 value_ref。密码输入不在本版本范围内。
+填写或选择普通任务参数时使用 value_ref。遇到登录使用 login 工具；密码只由运行时管理，禁止尝试读取密码字段或使用 fill 输入密码。
 页面仍在加载时使用 wait。需要登录或操作不支持的控件时，
 使用 finish，以 blocked 状态结束，并说明原因。
 每次仅返回一个 JSON 对象。单个操作仍可返回 {"tool":"back","args":{}}。
@@ -97,6 +98,11 @@ class Model:
         return json.loads(payload["choices"][0]["message"]["content"])
 
 
+def safe_state(tools, value):
+    handler = getattr(tools.session, "login_handler", None) if hasattr(tools, "session") else None
+    return handler.redact(value) if handler else value
+
+
 def run_script(skill: dict, tools: BrowserTools, max_steps: int = 30) -> dict:
     """顺序执行 Skill 的工具步骤，不请求模型，不自动重试副作用操作。"""
     actions = skill.get("actions")
@@ -105,8 +111,8 @@ def run_script(skill: dict, tools: BrowserTools, max_steps: int = 30) -> dict:
     records = []
 
     def outcome(status, message, turns):
-        return {"status": status, "message": message, "turns": turns,
-                "url": tools.page.url, "outputs": records, "mode": "script"}
+        return safe_state(tools, {"status": status, "message": message, "turns": turns,
+                "url": tools.page.url, "outputs": records, "mode": "script"})
 
     if skill.get("start"):
         progress(f"打开任务入口：{skill['start']}")
@@ -125,7 +131,7 @@ def run_script(skill: dict, tools: BrowserTools, max_steps: int = 30) -> dict:
             args["value"] = skill["params"][args.pop("value_ref")]
         result = tools.execute(name, args)
         result_progress(result, scripted=True)
-        if result.get("approval_denied"):
+        if result.get("approval_denied") or result.get("login_blocked"):
             return outcome("blocked", f"第 {turn} 步未获授权，操作未执行，任务已停止：{result['error']}", turn)
         if not result["ok"] or result.get("after_wait", {}).get("ok") is False:
             error = result.get("error") or result["after_wait"]["error"]
@@ -145,10 +151,10 @@ def run(skill: dict, tools: BrowserTools, model: Model, max_steps: int = 30) -> 
     model_skill = {key: value for key, value in skill.items() if key != "actions"}
 
     def finish(status, message):
-        return {"status": status, "message": message, "url": tools.page.url,
+        return safe_state(tools, {"status": status, "message": message, "url": tools.page.url,
                 "turns": calls, "steps": used, "llm_calls": calls, "max_steps": max_steps,
                 "action_steps": action_steps, "finish_steps": finish_steps,
-                "invalid_plans": invalid_plans}
+                "invalid_plans": invalid_plans})
 
     def remember(name, args, result, url):
         if name not in ("read", "snapshot", "locate") or not result.get("ok"):
@@ -169,7 +175,7 @@ def run(skill: dict, tools: BrowserTools, model: Model, max_steps: int = 30) -> 
         result = tools.execute("goto", {"url": skill["start"]})
         result_progress(result)
         history.append({"tool": "goto", "result": result})
-        if result.get("approval_denied"):
+        if result.get("approval_denied") or result.get("login_blocked"):
             return finish("blocked", f"入口导航未获授权，任务已停止：{result['error']}")
 
     while used < max_steps:
@@ -195,12 +201,12 @@ def run(skill: dict, tools: BrowserTools, model: Model, max_steps: int = 30) -> 
             recent.append(item)
         progress("正在等待 LLM 返回阶段计划…")
         requested = monotonic()
-        decision = model.decide({
+        decision = model.decide(safe_state(tools, {
             "skill": model_skill, "page": observation, "recent_actions": recent,
             "evidence": [{k: v for k, v in item.items() if k != "key"} for item in evidence],
             "steps_left": max_steps - used, "turns_left": max_steps - used,
             "last_stage": last_stage,
-        })
+        }))
         model_progress(f"第 {calls} 次规划已返回", f"模型等待 {monotonic() - requested:.1f} 秒")
         if isinstance(decision, dict) and decision.get("tool") == "finish" and "actions" not in decision:
             used += 1
@@ -255,7 +261,7 @@ def run(skill: dict, tools: BrowserTools, model: Model, max_steps: int = 30) -> 
             history.append(record)
             last_stage["executed"] = index + 1
             last_stage["skipped"] = len(actions) - index - 1
-            if result.get("approval_denied"):
+            if result.get("approval_denied") or result.get("login_blocked"):
                 return finish("blocked", f"操作未获授权且未执行，已停止任务，不再尝试其他操作：{result['error']}")
             failed = not result.get("ok") or result.get("after_wait", {}).get("ok") is False
             current_pages = tuple(tools.page.context.pages)

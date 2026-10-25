@@ -39,7 +39,7 @@ class ApprovalPolicy:
         if name == "download":
             details["download_directory"] = str(tools.files.options.download_dir)
             details["download_name"] = args.get("filename") or "采用网站建议名称（同名加编号）"
-        if name in ("read", "snapshot", "locate", "wait", "wait_for", "scroll", "hover"):
+        if name in ("login", "read", "snapshot", "locate", "wait", "wait_for", "scroll", "hover"):
             return None, details
         if name in ("upload", "download", "drag"):
             return "文件操作或拖动可能改变外部数据", details
@@ -144,7 +144,9 @@ class ApprovalPolicy:
                 details["page_text"] = snapshot["text"][:6000]
                 details["page_text_truncated"] = snapshot["truncated"] or len(snapshot["text"]) > 6000
                 model_progress("AI 授权审核", f"正在审核关键操作：{name}；等待模型返回…")
-                review = self.reviewer({"task": self.skill, "operation": details})
+                state = {"task": self.skill, "operation": details}
+                handler = getattr(getattr(tools, "session", None), "login_handler", None)
+                review = self.reviewer(handler.redact(state) if handler else state)
                 approved = isinstance(review, dict) and review.get("approved") is True and isinstance(review.get("reason"), str) and bool(review["reason"].strip())
                 explanation = review.get("reason", "审核格式无效") if isinstance(review, dict) else "审核格式无效"
             if approved:

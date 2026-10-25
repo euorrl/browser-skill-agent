@@ -11,7 +11,13 @@ class GenerationModel(Model):
         self.timeout = timeout
         self.progress = progress or (lambda message: None)
 
+    def check_cancelled(self):
+        cancel = getattr(self, "cancel", None)
+        if cancel is not None and cancel.is_set():
+            raise RuntimeError("流程生成已取消")
+
     def request(self, state, prompt):
+        self.check_cancelled()
         body = {
             "model": self.model,
             "messages": [{"role": "system", "content": prompt},
@@ -30,6 +36,7 @@ class GenerationModel(Model):
                 response.raise_for_status()
                 self.progress("模型已连接，正在接收生成结果…")
                 for line in response.iter_lines():
+                    self.check_cancelled()
                     now = monotonic()
                     if now - start > self.timeout:
                         raise TimeoutError("模型生成超过总时间上限；未保存不完整草稿")
@@ -62,6 +69,7 @@ class GenerationModel(Model):
                 self.usage["reported_requests"] += 1
                 for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
                     self.usage[key] += usage[key]
+        self.check_cancelled()
         if finish == "length":
             raise ValueError("模型输出达到 Token 上限，草稿不完整；请缩短录制任务")
         if not done or finish != "stop":

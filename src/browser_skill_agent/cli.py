@@ -1,6 +1,8 @@
 """命令行入口；从 .env 或环境变量读取模型配置。"""
 
 import argparse
+import getpass
+import yaml
 import os
 from pathlib import Path
 import sys
@@ -12,6 +14,7 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
 from .runtime import Model, run, run_script
+from .login import LoginHandler, secret_names
 from .skill import load_skill
 from .tools import BrowserTools
 from .output import print_result, progress
@@ -50,7 +53,7 @@ def main() -> int:
                         help="任务参数，格式为 参数名=参数值，可重复指定")
     parser.add_argument("--max-steps", type=int, default=30, help="最大执行步数，LLM 模式含 finish 和无效计划，默认 30")
     display = parser.add_mutually_exclusive_group()
-    display.add_argument("--headless", action="store_true", help="全程无界面运行浏览器")
+    display.add_argument("--headless", action="store_true", help="后台运行；需要人工登录时显示同一浏览器，结束后关闭")
     display.add_argument("--result-only", action="store_true", help="执行期间窗口位于屏幕外，结束后显示最终页面")
     parser.add_argument("--keep-open", action=argparse.BooleanOptionalAction, default=True,
                         help="默认结束后保留可见浏览器，回车关闭；--no-keep-open 自动关闭，无界面模式不等待")
@@ -74,6 +77,7 @@ def main() -> int:
     policy = None
     needs_model = args.llm or args.approval == "ai"
     reported = False
+    tools = None
 
     def report(result):
         nonlocal reported
@@ -84,11 +88,18 @@ def main() -> int:
             "requests": 0, "reported_requests": 0,
         }
         result["approval"] = {"mode": args.approval, "decisions": policy.decisions if policy else []}
+        if tools is not None and getattr(tools.session, "login_handler", None):
+            result = tools.session.login_handler.redact(result)
         print_result(result, as_json=args.json)
         sys.stdout.flush()
         reported = True
     try:
-        skill = load_skill(args.skill, dict(args.param))
+        supplied = dict(args.param)
+        raw = yaml.safe_load(Path(args.skill).read_text(encoding="utf-8-sig").split("---",2)[1])
+        for name in secret_names(raw):
+            if not supplied.get(name):
+                supplied[name] = getpass.getpass(f"请输入 {name}（不保存，留空改为人工登录）：")
+        skill = load_skill(args.skill, supplied)
         file_options = FileOptions.from_skill(skill)
         settings = {name: os.environ.get(name, "") for name in (
             "MODEL_BASE_URL", "MODEL_API_KEY", "MODEL_NAME",
@@ -102,7 +113,7 @@ def main() -> int:
         progress(f"任务：{skill['name']}\n目标：{skill['goal']}")
         progress(f"执行模式：{'脚本执行（不使用 LLM 规划）' if not args.llm else 'LLM 决策'}")
         progress(f"授权模式：{ {'human': '关键操作由人工确认', 'ai': '关键操作由 AI 审核（会调用模型）', 'allow': '全部允许，不进行授权确认'}[args.approval] }")
-        display_name = "结束后显示" if args.result_only else ("无界面运行" if args.headless else "全程显示")
+        display_name = "结束后显示" if args.result_only else ("后台运行（可人工登录）" if args.headless else "全程显示")
         progress(f"浏览器模式：{display_name}；执行上限：{args.max_steps}")
         profile_dir = str(args.profile_dir.resolve()) if args.profile_dir else ""
         progress(f"浏览器会话：{profile_dir or '本次独立临时会话'}")
@@ -115,15 +126,15 @@ def main() -> int:
                 # 空路径由 Playwright 创建并清理独立临时目录。
                 user_data_dir=profile_dir,
                 channel="msedge",
-                headless=args.headless,
+                headless=False,
                 ignore_https_errors=args.ignore_https_errors,
-                args=RESULT_ONLY_ARGS if args.result_only else [],
+                args=RESULT_ONLY_ARGS if args.result_only or args.headless else [],
             )
             try:
                 presentation = None
                 tools = None
                 try:
-                    if args.result_only:
+                    if args.result_only or args.headless:
                         presentation = ResultOnlyDisplay(context)
                     page = context.pages[0] if context.pages else context.new_page()
                     if needs_model:
@@ -144,6 +155,11 @@ def main() -> int:
                     policy = ApprovalPolicy(args.approval, skill, model.review if model else None,
                                             show_for_approval, hide_after_approval)
                     tools = BrowserTools(page, approval=policy, file_options=file_options)
+                    def login_prompt(message, details):
+                        progress(message + "\n完成后按回车继续；输入 n 停止。")
+                        try:return input().strip().lower() not in ("n", "no")
+                        except (EOFError, KeyboardInterrupt):return False
+                    tools.session.login_handler = LoginHandler(tools, skill, supplied, login_prompt, presentation)
                     if not args.llm:
                         result = run_script(skill, tools, args.max_steps)
                     else:
@@ -151,7 +167,7 @@ def main() -> int:
                 except Exception as exc:
                     result = {"status": "failed", "message": f"运行遇到异常（{type(exc).__name__}）：{exc}"}
                 report(result)
-                if presentation is not None:
+                if presentation is not None and not args.headless:
                     try:
                         presentation.show(tools.page if tools and context.pages else None)
                         progress("已显示任务结束时的浏览器页面，原有标签页与页面状态已保留。")

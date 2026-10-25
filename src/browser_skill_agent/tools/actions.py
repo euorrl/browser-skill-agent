@@ -5,8 +5,18 @@ class Actions:
     def __init__(self, session):
         self.s = session
 
-    def click(self, target, button="left"):
-        self.s.prepare(target).click(button=button)
+    def click(self, target, button="left", expect_popup=False):
+        if not isinstance(expect_popup, bool):
+            raise ValueError("expect_popup 必须为布尔值")
+        locator = self.s.prepare(target)
+        if expect_popup:
+            with self.s.current().expect_popup() as pending:
+                locator.click(button=button)
+            self.s.page = pending.value
+            self.s.register_page(self.s.page)
+            self.s.page.wait_for_load_state("domcontentloaded")
+        else:
+            locator.click(button=button)
 
     def double_click(self, target):
         self.s.prepare(target).dblclick()
@@ -21,8 +31,18 @@ class Actions:
         # 逐键输入会触发键盘事件，适用于自动补全；在已有内容后追加。
         self.s.prepare(target, editable=True).press_sequentially(value, delay=40)
 
-    def press(self, target, key):
-        self.s.prepare(target).press(key)
+    def press(self, target, key, expect_popup=False):
+        if not isinstance(expect_popup, bool):
+            raise ValueError("expect_popup 必须为布尔值")
+        locator = self.s.prepare(target)
+        if expect_popup:
+            with self.s.current().expect_popup() as pending:
+                locator.press(key)
+            self.s.page = pending.value
+            self.s.register_page(self.s.page)
+            self.s.page.wait_for_load_state("domcontentloaded")
+        else:
+            locator.press(key)
 
     def select(self, target, value=None, label=None):
         if (value is None) == (label is None):

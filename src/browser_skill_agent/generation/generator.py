@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 from .model import GenerationModel
 from ..tools import TOOL_HELP
+from ..login import validate_login, secret_names
 from ..tools.registry import TOOL_GROUPS
 from .prompt import SYSTEM_PROMPT, RUNTIME_HELP
 
@@ -86,7 +87,15 @@ def validate(result):
     skill = result.get("skill")
     if not isinstance(skill, dict):
         raise ValueError("模型缺少 skill 对象")
-    allowed = {"name", "description", "params", "start", "goal", "actions", "stages", "instructions", "file_params"}
+    # 仅整理含义明确的示例字段错层；冲突值不得静默覆盖。
+    if "example_params" in skill:
+        nested = skill["example_params"]
+        if "example_params" in result and result["example_params"] != nested:
+            raise ValueError("内外层 example_params 不一致，不能自动选择示例参数")
+        result["example_params"] = skill.pop("example_params")
+    if "example_params_note" in skill and skill["example_params_note"] is None:
+        skill.pop("example_params_note")
+    allowed = {"name", "description", "params", "start", "goal", "actions", "stages", "instructions", "file_params", "login"}
     if set(skill) - allowed:
         raise ValueError("Skill 含不支持的字段：" + ", ".join(sorted(set(skill) - allowed)))
     for key in ("name", "description", "start", "goal", "instructions"):
@@ -105,6 +114,9 @@ def validate(result):
     for key in ("evidence_map", "assumptions", "unresolved"):
         if not isinstance(result.get(key), list):
             raise ValueError(f"缺少 {key} 列表")
+    validate_login(skill)
+    for name in secret_names(skill):
+        examples[name] = ""
     mapping = skill.get("file_params", {})
     if not isinstance(mapping, dict) or set(mapping) - {"uploads", "upload_dir", "download_dir", "download_name"}:
         raise ValueError("file_params 字段不符合 runtime 规范")
@@ -177,28 +189,111 @@ def normalize_guidance(value=None):
     return result
 
 
+def ground_recorded_targets(result, state):
+    """完整身份已有录制证据时，直接使用 DOM 精确文字，避免模型猜无障碍名称。"""
+    examples = result["example_params"]
+    recorded = [a.get("target", {}) for a in state["actions"]]
+    changes = []
+    def visit(value):
+        if isinstance(value, list):
+            for child in value: visit(child)
+        elif isinstance(value, dict):
+            target = value.get("target")
+            if isinstance(target, dict) and target.get("role"):
+                # 单元素可见性等待不能只写整个列表的 role；唯一录制候选可直接作为等待目标。
+                if value.get('state', 'visible') == 'visible' and not any(k in target for k in ('name', 'has_text', 'id', 'text', 'label', 'nth', 'within')):
+                    names = {t.get('name') for t in recorded if t.get('role') == target['role'] and t.get('name')}
+                    if len(names) == 1:
+                        target['has_text'] = next(iter(names))
+                        target['has_text_exact'] = True
+                field = "name" if "name" in target else "has_text"
+                text = target.get(field)
+                if isinstance(text, str):
+                    bound = re.sub(r"{{\s*([a-z][a-z0-9_]*)\s*}}", lambda m: examples.get(m[1], m[0]), text)
+                    matches = [t for t in recorded if t.get('role') == target['role'] and t.get('name') == bound and not t.get('label')]
+                    if matches and target.get('exact', True):
+                        target.pop('name', None)
+                        target.pop('exact', None)
+                        target['has_text'] = text
+                        target['has_text_exact'] = True
+                        changes.append({'target': dict(target), 'target_text': bound, 'rule': '使用录制中完整 DOM 文字精确匹配，避免伪元素无障碍名称差异'})
+            for child in value.values(): visit(child)
+    visit(result['skill']['actions'])
+    result['grounding_changes'] = changes
+    if changes:
+        targets = list(dict.fromkeys(json.dumps(c['target'], ensure_ascii=False) for c in changes))
+        result['skill']['instructions'] += '\n\n## 录制定位约束\n以下定位以完整 DOM 文字为依据；LLM 执行同样使用，不改为精确 name 或子串匹配：\n' + '\n'.join('- ' + t for t in targets)
+
+
+def validate_recording_alignment(result, state):
+    """核对录制已提供的身份信息，阻止将宽泛候选冒充唯一目标。"""
+    actions = result["skill"]["actions"]
+    examples = result["example_params"]
+    sources = {a["id"]: a for a in state["actions"]}
+    errors = []
+    def check_targets(value):
+        if isinstance(value, list):
+            for child in value: check_targets(child)
+        elif isinstance(value, dict):
+            target = value.get('target')
+            if isinstance(target, dict) and 'nth' in target:
+                errors.append('生成流程不得用 nth 选择第一个匹配项；请依据录制中的完整目标文字消歧，不能用序号隐藏多候选')
+            for child in value.values(): check_targets(child)
+    check_targets(actions)
+    for entry in result["evidence_map"]:
+        action = actions[entry["action_index"] - 1]
+        target = action.get("args", {}).get("target", {})
+        if action["tool"] not in {"click", "download"}:
+            continue
+        for source_id in entry["source_actions"]:
+            original = sources.get(source_id, {}).get("target", {})
+            if original.get("role") != target.get("role") or not original.get("name"):
+                continue
+            text = target.get("has_text", target.get("name", ""))
+            text = re.sub(r"{{\s*([a-z][a-z0-9_]*)\s*}}", lambda m: examples.get(m[1], m[0]), text)
+            if text and text != original["name"] and text in original["name"]:
+                errors.append(f"动作 {entry['action_index']} 截短了录制目标身份；保留完整文字：{original['name']}")
+            if "nth" in target:
+                errors.append(f"动作 {entry['action_index']} 不得用 nth 掩盖目标歧义，录制没有顺序选择依据")
+            if target.get("role") == "link" and text == original["name"] and "has_text" in target and not target.get("has_text_exact"):
+                errors.append(f"动作 {entry['action_index']} 文档链接须 has_text_exact:true，避免同时匹配摘要等后缀对象")
+    for before, after in zip(actions, actions[1:]):
+        if before['tool'] == 'download' and after['tool'] == 'wait_for':
+            a, b = before['args'].get('target', {}), after['args'].get('target', {})
+            if a.get('role') == b.get('role') and a.get('name', a.get('has_text')) == b.get('name', b.get('has_text')):
+                errors.append('download 已等待保存完成，不得追加等待同一下载按钮恢复来证明文件完成')
+    if errors:
+        raise ValueError("；".join(dict.fromkeys(errors)))
+
+
 def generate(recording, model, output_root, guidance=None):
     state = prepare_recording(recording)
     guidance = normalize_guidance(guidance)
     state["user_guidance"] = guidance
     raw = model.request(state, SYSTEM_PROMPT)
+    attempts = []
     corrections = []
     for attempt in range(2):
+        from copy import deepcopy
+        attempts.append({"response": deepcopy(raw)})
         try:
             result = validate(raw)
+            ground_recorded_targets(result, state)
+            validate_recording_alignment(result, state)
             break
         except (ValueError, TypeError, KeyError) as exc:
             corrections.append(str(exc))
+            attempts[-1]['error'] = str(exc)
             if attempt == 1:
                 failed = Path(output_root) / ("invalid-" + uuid4().hex[:8])
                 failed.mkdir(parents=True, exist_ok=False)
                 (failed / "generation.json").write_text(json.dumps({"status": "invalid", "errors": corrections,
-                    "model_output": raw, "usage": dict(model.usage)}, ensure_ascii=False, indent=2), encoding="utf-8")
-                raise ValueError(f"格式修正后仍无效；诊断保存在 {failed}") from exc
+                    "model_output": raw, "attempts": attempts, "usage": dict(model.usage)}, ensure_ascii=False, indent=2), encoding="utf-8")
+                raise ValueError(f"草稿修正后仍未通过：{exc}；诊断保存在 {failed}") from exc
             if hasattr(model, "progress"):
                 model.progress(f"草稿格式需修正：{exc}；仅尝试一次格式修正，不操作网页。")
             raw = model.request({"runtime": RUNTIME_HELP, "tools": TOOL_HELP, "draft": raw,
-                                 "user_guidance": guidance,
+                                 "user_guidance": guidance, "recording_actions": state["actions"],
                                  "validation_error": str(exc),
                                  "instruction": "仅修正结构或工具参数错误，保持任务、参数和已有证据；不能增加未经证实的操作。返回完整 JSON。"}, SYSTEM_PROMPT)
     source_ids = {action["id"] for action in state["actions"]}
@@ -214,6 +309,14 @@ def generate(recording, model, output_root, guidance=None):
                 "needed_evidence": "重新核对原始录制，补充真实来源；该映射不能作为已验证证据。"})
             if result["status"] == "draft":
                 result["status"] = "needs_evidence"
+    # 无定位的图标点击不能被模型悄悄删掉后宣称完成了原任务。
+    missing = [a['id'] for a in state['actions'] if a.get('kind') in {'click', 'double_click'}
+               and not a.get('target', {}).get('candidates') and not a.get('target', {}).get('name')]
+    if missing:
+        result['status'] = 'needs_evidence'
+        result['blocking_recording_gaps'] = missing
+        result['unresolved'].append({'source_actions': missing, 'issue': '录制中的图标点击缺少可定位控件，不能确认业务含义或省略后自动验证',
+                                     'needed_evidence': '重新录制对应操作，需包含按钮身份及操作前后状态'})
     skill = dict(result["skill"])
     body = skill.pop("instructions")
     destination = Path(output_root) / (skill["name"] + "-" + uuid4().hex[:8])

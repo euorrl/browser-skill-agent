@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import yaml
+from ..login import secret_names, validate_login
 
 DISPLAY_NAMES = {
     "bejson_timestamp_precision": "转换时间戳与日期",
@@ -53,6 +54,12 @@ class Store:
                     self.migrate(item)
                     changed = True
                 meta = metadata(self.path(item["id"]).read_text(encoding="utf-8"))
+                secrets = sorted(secret_names(meta))
+                if item.get("secret_params", []) != secrets or any(item["defaults"].get(k) for k in secrets):
+                    item["secret_params"] = secrets
+                    for k in secrets:item["defaults"][k] = ""
+                    self.write_defaults(item)
+                    changed = True
                 legacy = re.sub(r"{{.*?}}", "指定内容", meta.get("goal", "未命名流程"))[:28]
                 if item["name"] == legacy and meta.get("name") in DISPLAY_NAMES:
                     item["name"] = DISPLAY_NAMES[meta["name"]]
@@ -90,6 +97,8 @@ class Store:
                    and metadata(p.read_text(encoding="utf-8-sig")).get("name") == meta.get("name")]
         destination = matches[0] if len(matches) == 1 else self.new_path(meta, item["id"])
         destination.write_text(text, encoding="utf-8")
+        item["secret_params"] = sorted(secret_names(meta))
+        for k in item["secret_params"]:item["defaults"][k] = ""
         item["skill_path"] = destination.relative_to(self.project).as_posix()
         self.write_defaults(item)
 
@@ -126,6 +135,8 @@ class Store:
                 source = path.parent / filename
                 if source.exists():
                     shutil.copy2(source, destination.parent / filename)
+        item["secret_params"] = sorted(secret_names(meta))
+        for k in item["secret_params"]:item["defaults"][k] = ""
         item["skill_path"] = destination.relative_to(self.project).as_posix()
         self.items.append(item)
         self.write_defaults(item)
@@ -142,6 +153,9 @@ class Store:
         defaults = data.get("defaults", item["defaults"])
         if not isinstance(defaults, dict):
             raise ValueError("默认参数格式无效")
+        validate_login(meta)
+        item["secret_params"] = sorted(secret_names(meta))
+        defaults = {k: ("" if k in item["secret_params"] else v) for k,v in defaults.items()}
         if text is not None:
             self.path(ident).write_text(text, encoding="utf-8")
             item["status"] = "unverified"
@@ -157,7 +171,56 @@ class Store:
         self.save()
         return item
 
+    def related_folders(self, item):
+        """只清理项目受管目录中有明确归属的文件，不追随任意参数路径。"""
+        folders = set()
+        def owned(path, base):
+            path, base = Path(path).resolve(), (self.project / base).resolve()
+            if path.parent == base and base.is_relative_to(self.project):
+                folders.add(path)
+                return path
+            return None
+        def read_json(path):
+            try:
+                value = json.loads(path.read_text(encoding="utf-8"))
+                return value if isinstance(value, dict) else {}
+            except (OSError, ValueError):
+                return {}
+        skill = self.path(item["id"])
+        owned(skill.parent, "skills")
+        legacy = owned(self.root / item["id"], "data/flows")
+        recordings = set()
+        for directory in (skill.parent, legacy):
+            if directory is None:
+                continue
+            report = read_json(directory / "generation.json")
+            ident = report.get("recording_id")
+            if isinstance(ident, str) and ident and Path(ident).name == ident:
+                recordings.add(ident)
+                owned(self.project / "data/recordings" / ident, "data/recordings")
+        for report_path in (self.project / "data/generated").glob("*/generation.json"):
+            if read_json(report_path).get("recording_id") in recordings:
+                owned(report_path.parent, "data/generated")
+        validation = item.get("validation") or {}
+        if validation.get("folder"):
+            owned(validation["folder"], "data/validations")
+        for report_path in (self.project / "data/validations").glob("*/report.json"):
+            report = read_json(report_path)
+            source = report.get("source_path")
+            if source and Path(source).resolve() == skill:
+                owned(report_path.parent, "data/validations")
+        return folders
+
     def delete(self, ident):
-        self.get(ident)
+        item = self.get(ident)
+        folders = self.related_folders(item)
+        # 同一录制生成多个流程时，共享记录留到最后一个流程删除。
+        shared = set()
+        for other in self.items:
+            if other["id"] != ident:
+                shared.update(self.related_folders(other))
+        for folder in sorted(folders - shared):
+            if folder.exists():
+                shutil.rmtree(folder)
         self.items = [x for x in self.items if x["id"] != ident]
-        self.save()  # 仅从工作台移除；skills 中的文件仍可通过 CLI 使用。
+        self.save()

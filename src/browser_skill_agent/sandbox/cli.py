@@ -1,5 +1,7 @@
 """显式发起双模式验证，会调用配置的模型服务。"""
 import argparse
+import getpass
+import yaml
 import json
 import os
 from pathlib import Path
@@ -8,6 +10,7 @@ from dotenv import load_dotenv
 from ..generation.model import GenerationModel
 from ..cli import parameter
 from .runner import validate_flow
+from ..login import secret_names
 
 
 def main(argv=None):
@@ -26,10 +29,20 @@ def main(argv=None):
     sample = args.skill.parent/'example_params.json'
     defaults = json.loads(sample.read_text(encoding='utf-8')) if sample.exists() else {}
     defaults.update(dict(args.param))
+    raw = yaml.safe_load(args.skill.read_text(encoding='utf-8-sig').split('---',2)[1])
+    credentials = {}
+    for name in secret_names(raw):
+        credentials[name] = defaults.pop(name, '') or getpass.getpass(f'请输入 {name}（仅本次验证）：')
+        defaults[name] = ''
+    def login_prompt(message, details):
+        print(message)
+        try:return input('完成后回车继续，n 停止：').strip().lower() not in ('n','no')
+        except (EOFError, KeyboardInterrupt):return False
     checks = json.loads(args.checks.read_text(encoding='utf-8')) if args.checks else None
     with httpx.Client(timeout=60) as client:
         model = GenerationModel(client, *config, timeout=120, progress=print)
         report = validate_flow(args.skill, defaults, model, args.output, checks=checks,
-                               max_repairs=args.max_repairs, allow_files=args.allow_files, progress=print)
+                               max_repairs=args.max_repairs, allow_files=args.allow_files, progress=print,
+                               credentials=credentials, login_prompt=login_prompt)
     print(json.dumps({k: report.get(k) for k in ('status','reason','folder','usage','elapsed_seconds')}, ensure_ascii=False, indent=2))
     return 0 if report['status'] == 'passed' else 1

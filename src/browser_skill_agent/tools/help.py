@@ -59,3 +59,13 @@ fill/select/type_text/wait_for 可以用 value_ref:"参数名" 替代 value，�
 """
 
 TOOL_HELP += "\n工具 args 可选 wait_response：响应 URL 匹配模式。先监听再执行动作，等待该请求返回后再执行 wait_after；仅在已知真实接口时使用。不要猜测接口，超时不能直接重复提交。\n"
+
+TOOL_HELP += "\nlogin()：请求运行时完成登录。无参数，不接收账号密码。普通账号密码由运行时填写，验证码或扫码由用户接管；不要用 fill/read 操作密码字段。\n"
+
+TOOL_HELP += "\nclick(target, button=left, expect_popup=false)：录制确认点击会打开新标签页时设 expect_popup=true；先监听弹出页再点击，自动切换新页，再执行 wait_after。无需硬编码 page_id。\n"
+
+TOOL_HELP += "\nTARGET 的 has_text 默认子串匹配；has_text_exact:true 使 has_text 对整个 DOM 文字精确匹配（忽略空白差异），可排除同名摘要，不受 CSS 图标影响。download 返回成功时已等待文件保存完成，无需再等待下载按钮恢复。PDF 会核验文件头，HTML 错误页不算 PDF 下载成功。\n"
+
+TOOL_HELP += "\nTARGET 支持 title（实际观察到的 HTML title 属性），使用 get_by_title 精确定位图标控件。\n"
+
+TOOL_HELP += "\npress(target, key, expect_popup=False)：回车打开新标签页时设置 expect_popup=true，工具等待并切换新页。\n"

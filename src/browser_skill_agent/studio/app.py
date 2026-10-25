@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 import threading
+import shutil
+from tempfile import TemporaryDirectory
 from uuid import uuid4
 
 import httpx
@@ -20,6 +22,8 @@ from ..generation.model import GenerationModel
 from ..recording.recorder import Recorder, ASSETS as RECORD_ASSETS
 from ..recording.storage import now
 from ..runtime import run, run_script
+from ..login import LoginHandler, secret_names, public_params
+from ..browser_display import ResultOnlyDisplay, RESULT_ONLY_ARGS
 from ..output import TOOL_NAMES, capture_progress
 from ..skill import load_skill
 from ..tools import BrowserTools
@@ -53,6 +57,8 @@ class Studio:
         self.guidance_answer = None
         self.edit_draft = None
         self.validation_cancel = threading.Event()
+        self.generation_cancel = threading.Event()
+        self.credentials = {}
 
     def model(self, client, progress=None):
         values = [os.environ.get(k, "") for k in ("MODEL_BASE_URL", "MODEL_API_KEY", "MODEL_NAME")]
@@ -68,6 +74,7 @@ class Studio:
         if self.worker and not self.worker.done():
             coroutine.close()
             raise ValueError("当前任务尚未结束，请先完成或关闭任务浏览器。")
+        self.generation_cancel = threading.Event()
         self.chat_history = []
         self.edit_draft = None
         self.chat_epoch += 1
@@ -160,20 +167,55 @@ class Studio:
         finally:
             self.guidance_answer = None
 
+    def discard_recording(self):
+        ident = self.job.get("recording_id")
+        if ident:
+            base = (self.root / "data/recordings").resolve()
+            folder = (base / ident).resolve()
+            if folder.parent != base:
+                raise ValueError("录制目录无效，未删除文件")
+            if folder.exists():
+                shutil.rmtree(folder)
+        self.job.pop("recording_id", None)
+        self.job.pop("guidance", None)
+        self.job.update(state="cancelled", message="已取消生成，本次录制记录已删除。")
+        self.log("已取消生成并删除本次录制记录。")
+
     async def generate_flow(self, folder, name, guidance=None):
-        self.job.update(state="generating", requested_name=name, guidance=guidance or {}, message="正在生成流程…")
+        job, cancel = self.job, self.generation_cancel
+        job.update(state="generating", requested_name=name, guidance=guidance or {}, message="正在生成流程…")
         def progress(text):
-            self.job.update(message=text)
-            self.log(text)
-        def task():
-            with httpx.Client(timeout=300) as client:
-                model = self.model(client, progress)
-                return generate(folder, model, self.root / "skills", guidance=guidance)
-        destination, report = await asyncio.to_thread(task)
-        item = self.store.add(destination / "SKILL.md", name=name or None)
-        self.job.update(state="done", flow_id=item["id"], message="流程已保存。默认参数来自本次录制，首次运行前请检查。",
-                        usage=report["usage"])
-        if self.job.get("auto_validate"):
+            if not cancel.is_set():
+                job.update(message=text)
+                self.log(text, job)
+        # 草稿先写入隔离目录，确认未取消后才加入 skills，避免下次启动发现残留流程。
+        with TemporaryDirectory(prefix="flow-generation-") as temporary:
+            def task():
+                with httpx.Client(timeout=300) as client:
+                    model = self.model(client, progress)
+                    model.cancel = cancel
+                    return generate(folder, model, Path(temporary), guidance=guidance)
+            try:
+                destination, report = await asyncio.to_thread(task)
+            except Exception as exc:
+                if not cancel.is_set():
+                    diagnostics = Path(folder) / ("generation-failure-" + uuid4().hex[:8])
+                    if any(Path(temporary).iterdir()):
+                        shutil.copytree(temporary, diagnostics)
+                        raise ValueError(str(exc).replace(temporary, str(diagnostics))) from exc
+                    raise
+            if cancel.is_set():
+                self.discard_recording()
+                return
+            item = self.store.add(destination / "SKILL.md", name=name or None)
+        job.update(state="done", flow_id=item["id"], message="流程已保存。默认参数来自本次录制，首次运行前请检查。",
+                   usage=report["usage"])
+        if report.get("blocking_recording_gaps"):
+            self.store.get(item['id'])['status'] = 'blocked'
+            self.store.save()
+            job.update(state="blocked", message="草稿已保存，但录制有未识别的图标点击（" + ', '.join(report['blocking_recording_gaps']) + "）。无法确认完整任务，未启动自动验证。请重新录制该操作，并说明最终目标；不能将已完成的部分步骤算作整个任务完成。")
+            return
+        if job.get("auto_validate"):
             await self.validate(item["id"])
 
 
@@ -181,7 +223,16 @@ class Studio:
         from ..sandbox import validate_flow
         item = deepcopy(self.store.get(ident))
         original = self.store.path(ident).read_text(encoding="utf-8")
+        secrets = secret_names(metadata(original))
+        if any(not self.credentials.get(ident, {}).get(k) for k in secrets):
+            self.store.get(ident)["status"] = "unverified"
+            self.store.save()
+            self.job.update(state="blocked", flow_id=ident, name=item["name"], message="等待补充登录参数：请在流程编辑面板填写密码并保存；密码仅用于本次工作台会话，不会写入文件。")
+            return
         self.validation_cancel.clear()
+        loop = asyncio.get_running_loop()
+        def login_prompt(message, details):
+            return asyncio.run_coroutine_threadsafe(self.ask(message, details, "login"), loop).result()
         self.job.update(state="validating", flow_id=ident, name=item["name"], message="正在准备后台验证…")
         def progress(text):
             self.job["message"] = text
@@ -191,15 +242,16 @@ class Studio:
                 model = self.model(client, progress)
                 model.timeout = 120
                 return validate_flow(self.store.path(ident), item["defaults"], model, self.root / "data/validations",
-                                     allow_files=allow_files, progress=progress, cancel=self.validation_cancel)
+                                     allow_files=allow_files, progress=progress, cancel=self.validation_cancel,
+                                     credentials=self.credentials.get(ident, {}), login_prompt=login_prompt)
         report = await asyncio.to_thread(task)
         if self.store.get(ident) != item or self.store.path(ident).read_text(encoding="utf-8") != original:
             raise ValueError("验证期间原流程已变化，未覆盖；报告已保留。")
-        if report["status"] == "passed":
+        if report["status"] in ("passed", "executed"):
             candidate = Path(report["folder"]) / "SKILL.md"
             self.store.update(ident, {"definition": candidate.read_text(encoding="utf-8"), "defaults": item["defaults"]})
         current = self.store.get(ident)
-        current["status"] = "verified" if report["status"] == "passed" else ("unverified" if report["status"] == "not_started" else "blocked")
+        current["status"] = "verified" if report["status"] == "passed" else ("unverified" if report["status"] in ("not_started", "executed") else "blocked")
         current["validation"] = {k: report.get(k) for k in ("status", "reason", "folder", "elapsed_seconds", "usage")}
         self.store.save()
         message = report.get("reason", "验证结束") + "\n验证报告：" + report["folder"]
@@ -207,12 +259,12 @@ class Studio:
             usage = report["usage"]
             label = "Token" if usage.get("requests") == usage.get("reported_requests") else "已报告 Token（统计不完整）"
             message += f"\n本次验证：{usage['requests']} 次模型请求，{label}：{usage.get('total_tokens', 0)}"
-        self.job.update(state="done" if report["status"] == "passed" else "blocked", message=message,
-                        result={"outputs": [{"title": f"第 {a['revision']+1} 版 · {'脚本' if a['mode'] == 'script' else 'LLM'} · {'通过' if a['status'] == 'passed' else '未通过'}",
+        self.job.update(state="done" if report["status"] in ("passed", "executed") else "blocked", message=message,
+                        result={"outputs": [{"title": f"第 {a['revision']+1} 版 · {'脚本' if a['mode'] == 'script' else 'LLM'} · {'通过' if a['status'] == 'passed' else ('步骤完成 · 未核验' if a['status'] == 'executed' else '未通过')}",
                                              "data": a.get("evidence") or a.get("result") or a.get("error")}
                                             for a in report["attempts"]]}, usage=report["usage"])
 
-    async def execute(self, ident, params, close_after, approval="human", llm=False):
+    async def execute(self, ident, params, close_after, approval="human", llm=False, background=False):
         if approval not in ("human", "ai", "allow"):
             raise ValueError("未知授权模式")
         needs_model = llm or approval == "ai"
@@ -222,22 +274,28 @@ class Studio:
         defaults = dict(item["defaults"])
         if not isinstance(params, dict) or set(params) - set(defaults):
             raise ValueError("运行参数不属于该流程")
-        defaults.update({k: str(v) for k, v in params.items()})
-        if any(not value.strip() for value in defaults.values()):
+        secrets = set(item.get("secret_params", []))
+        self.remember_credentials(ident, params)
+        defaults.update({k: str(v) for k, v in params.items() if k not in secrets})
+        if any(not value.strip() for key,value in defaults.items() if key not in secrets):
             raise ValueError("请补齐运行参数。")
         skill = load_skill(str(self.store.path(ident)), defaults)
-        self.job.update(params=defaults, approval=approval, mode="llm" if llm else "script")
+        self.job.update(params=public_params(skill, defaults), approval=approval, mode="llm" if llm else "script")
         loop = asyncio.get_running_loop()
         self.stop_browser.clear()
         def human(reason, details):
             return asyncio.run_coroutine_threadsafe(self.ask(reason, details), loop).result()
+        def login_prompt(message, details):
+            return asyncio.run_coroutine_threadsafe(self.ask(message, details, "login"), loop).result()
         def task():
             with sync_playwright() as pw, (httpx.Client(timeout=300) if needs_model else nullcontext()) as client:
-                context = pw.chromium.launch_persistent_context("", channel="msedge", headless=False)
+                context = pw.chromium.launch_persistent_context("", channel="msedge", headless=False, args=RESULT_ONLY_ARGS if background else [])
                 try:
                     model = self.model(client, lambda text: self.job.update(message="模型处理中：" + text)) if needs_model else None
                     policy = ApprovalPolicy(approval, skill, reviewer=model.review if model else None, human_prompt=human)
                     tools = BrowserTools(context.pages[0], approval=policy, file_options=FileOptions.from_skill(skill))
+                    presentation = ResultOnlyDisplay(context) if background else None
+                    tools.session.login_handler = LoginHandler(tools, skill, {**defaults, **self.credentials.get(ident, {})}, login_prompt, presentation)
                     execute = tools.execute
                     def progress_execute(name, args):
                         self.job["message"] = "正在" + TOOL_NAMES.get(name, "执行操作") + "…"
@@ -249,8 +307,10 @@ class Studio:
                         result = run(skill, tools, model, max_steps=budget) if llm else run_script(skill, tools, max_steps=budget)
                     result["mode"] = "llm" if llm else "script"
                     result["approval"] = {"mode": approval, "decisions": policy.decisions}
+                    result = tools.session.login_handler.redact(result)
                     if model:
                         result["usage"] = dict(model.usage)
+                    if presentation and not close_after:presentation.show(tools.page)
                     self.job.update(state="done" if result["status"] == "succeeded" else "blocked",
                                     message=result["message"], result=result, browser_open=not close_after)
                     item["last_result"] = {"status": result["status"], "time": now()}
@@ -265,6 +325,15 @@ class Studio:
                     context.close()
                     self.job["browser_open"] = False
         await asyncio.to_thread(task)
+
+    def remember_credentials(self, ident, values):
+        changed = False
+        for key in self.store.get(ident).get("secret_params", []):
+            if values.get(key):
+                value = str(values[key])
+                changed |= self.credentials.get(ident, {}).get(key) != value
+                self.credentials.setdefault(ident, {})[key] = value
+        return changed
 
     async def chat(self, text):
         if not isinstance(text, str) or not text.strip() or len(text) > 6000:
@@ -364,11 +433,22 @@ class Studio:
                 self.launch("validate", self.validate(data["id"], data.get("allow_files", True) is True), data["id"])
             elif command == "cancel_validation":
                 self.validation_cancel.set()
+                if self.answer and not self.answer.done():self.answer.set_result(False)
             elif command == "run":
                 self.launch("run", self.execute(data["id"], data.get("params", {}), data.get("close_after") is True,
-                                                data.get("approval", "human"), data.get("llm") is True), data["id"])
+                                                data.get("approval", "human"), data.get("llm") is True, data.get("background") is True), data["id"])
             elif command == "close_browser":
                 self.stop_browser.set()
+            elif command == "cancel_generation":
+                if not self.job or data.get("job_id") != self.job["id"] or self.job["state"] not in {"guidance", "generating", "cancelling"}:
+                    raise ValueError("此任务已不在生成阶段，请刷新后重试。")
+                self.generation_cancel.set()
+                if self.job["state"] == "guidance":
+                    self.discard_recording()
+                    if self.guidance_answer and not self.guidance_answer.done():
+                        self.guidance_answer.set_result(None)
+                else:
+                    self.job.update(state="cancelling", message="正在取消生成并清理记录；已发出的模型请求可能仍在处理，返回结果将被丢弃。")
             elif command == "guidance":
                 if not self.job or data.get("job_id") != self.job["id"] or self.job["state"] != "guidance" or not self.guidance_answer or self.guidance_answer.done():
                     raise ValueError("此录制已不在等待补充信息，请刷新后重试。")
@@ -404,12 +484,19 @@ class Studio:
                     raise ValueError("请在当前任务结束并关闭任务浏览器后编辑流程。")
                 if command == "delete":
                     self.store.delete(data["id"])
+                    self.credentials.pop(data["id"], None)
+                    if self.job and self.job.get("flow_id") == data["id"]:
+                        self.job = None
+                    self.chat_history = []
+                    self.chat_epoch += 1
+                    self.edit_draft = None
                 else:
+                    credential_changed = self.remember_credentials(data["id"], data.get("defaults", {}))
                     before = deepcopy(self.store.get(data["id"]))
                     original = self.store.path(data["id"]).read_text(encoding="utf-8")
                     self.store.update(data["id"], data)
                     after = self.store.get(data["id"])
-                    if before["defaults"] != after["defaults"] or original != self.store.path(data["id"]).read_text(encoding="utf-8"):
+                    if credential_changed or before["defaults"] != after["defaults"] or original != self.store.path(data["id"]).read_text(encoding="utf-8"):
                         self.launch("validate", self.validate(data["id"]), data["id"])
             else:
                 raise ValueError("未知操作")
@@ -431,6 +518,7 @@ class Studio:
                 await self.closed.wait()
             finally:
                 self.closing = True
+                self.credentials.clear()
                 self.validation_cancel.set()
                 if self.guidance_answer and not self.guidance_answer.done():
                     self.guidance_answer.set_result(None)

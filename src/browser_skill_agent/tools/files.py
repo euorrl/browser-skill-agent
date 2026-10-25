@@ -13,6 +13,15 @@ def validate_filename(name):
     return name
 
 
+def verify_download_content(path):
+    """阻止将 HTML 错误页当作 PDF；不声称验证了文档内容。"""
+    if path.suffix.lower() == '.pdf':
+        with path.open('rb') as stream:
+            head = stream.read(1024)
+        if not head.lstrip().startswith(b'%PDF-'):
+            raise ValueError(f"下载文件不是有效 PDF 文件头，可能是网站错误页；保留文件供诊断：{path}")
+
+
 class FileOptions:
     """本次运行明确选择的文件和保存目录，不扫描上传目录。"""
 
@@ -133,5 +142,6 @@ class Files:
         if error:
             path.unlink(missing_ok=True)
             raise RuntimeError(error)
+        verify_download_content(path)
         progress(f"下载已保存：{path}")
         return {"path": str(path), "bytes": path.stat().st_size}

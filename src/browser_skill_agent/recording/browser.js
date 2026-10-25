@@ -29,8 +29,10 @@
     const r = role(e), l = label(e);
     const name = l || (['button','link','option','tab'].includes(r) ? safeText(e) : '');
     const candidates = [];
-    if (r && name) candidates.push({role:r,name});
+    // DOM 文本不等于无障碍名称；伪元素图标可能只出现在后者。
+    if (r && name) candidates.push(l ? {role:r,name} : {role:r,has_text:name,has_text_exact:true});
     if (l) candidates.push({label:l});
+    if (e.getAttribute('title')) candidates.push({title:short(e.getAttribute('title'))});
     if (e.placeholder) candidates.push({placeholder:short(e.placeholder)});
     if (e.id) candidates.push({id:e.id});
     const test = e.getAttribute('data-testid') || e.getAttribute('data-test');
@@ -38,7 +40,7 @@
     const text = safeText(e);
     if (text && !['INPUT','TEXTAREA','SELECT'].includes(e.tagName)) candidates.push({text});
     const container = e.parentElement?.closest('form,dialog,[role=dialog],article,[role=row],li,main');
-    return {tag:e.tagName.toLowerCase(),role:r,name,label:l,id:e.id || null,
+    return {tag:e.tagName.toLowerCase(),role:r,name,name_source:l ? "label" : "dom_text",label:l,id:e.id || null,
       input_type:e.type || null, candidates, sensitive:!!sensitive(e),
       container:container ? {tag:container.tagName.toLowerCase(),id:container.id || null,role:role(container),name:label(container),text:safeText(container)} : null};
   }
@@ -100,7 +102,16 @@
   },true);
   document.addEventListener('click', event => {
     if (!active || !event.isTrusted) return;
-    const raw=element(event), e=raw?.closest('button,a,[role=button],[role=option],[role=tab],[role=treeitem],input,select,label') || raw;
+    const raw=element(event);
+    let e=raw?.closest('button,a,[role=button],[role=option],[role=tab],[role=treeitem],input,select,label,[aria-label],[title],[tabindex]');
+    if (!e && raw) {
+      // SVG/path 常是图标内部节点，向上寻找实际可交互的 HTML 控件。
+      for (let parent=raw.parentElement, depth=0; parent && depth<5; parent=parent.parentElement,depth++) {
+        if (parent.namespaceURI==='http://www.w3.org/1999/xhtml' &&
+            (parent.onclick || getComputedStyle(parent).cursor==='pointer')) {e=parent;break;}
+      }
+    }
+    e=e || raw;
     if (!e || e.matches('input,select,textarea') || (e.tagName==='LABEL' && e.control)) return;
     action(event.detail===2?'double_click':'click',e);
   },true);

@@ -11,6 +11,8 @@ from uuid import uuid4
 from playwright.sync_api import sync_playwright
 
 from ..approval import ApprovalPolicy
+from ..login import LoginHandler, secret_names
+from ..browser_display import ResultOnlyDisplay, RESULT_ONLY_ARGS
 from ..generation.generator import compact
 from ..output import capture_progress
 from ..runtime import run, run_script
@@ -34,17 +36,20 @@ def write_json(path, data):
 
 
 def validate_flow(path, defaults, model, output_root, *, checks=None, max_repairs=2,
-                  allow_files=True, progress=lambda text: None, cancel=None):
+                  allow_files=True, progress=lambda text: None, cancel=None, credentials=None, login_prompt=None, trial_on_contract_failure=True):
     if not isinstance(max_repairs, int) or not 0 <= max_repairs <= 3:
         raise ValueError('修复次数必须为 0–3')
     folder = Path(output_root) / (datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid4().hex[:8])
     folder.mkdir(parents=True)
     original = Path(path).read_text(encoding='utf-8-sig')
+    login_credentials = {**defaults, **(credentials or {})}
+    secrets = secret_names(metadata(original))
+    defaults = {k: ("" if k in secrets else v) for k,v in defaults.items()}
     candidate = original
     report = {'status': 'blocked', 'started_at': datetime.now(timezone.utc).isoformat(),
               'scope': '仅验证本次参数和固定验收条件；不保证所有取值、网站版本或外部状态', 'approval': 'allow',
               'defaults': defaults, 'contract_attempts': [], 'attempts': [], 'repairs': [], 'checks': [],
-              'source_sha256': hashlib.sha256(original.encode()).hexdigest(), 'folder': str(folder.resolve())}
+              'source_path': str(Path(path).resolve()), 'source_sha256': hashlib.sha256(original.encode()).hexdigest(), 'folder': str(folder.resolve())}
     initial_usage = deepcopy(getattr(model, 'usage', {}))
     started = monotonic()
     deadline = started + 900
@@ -69,16 +74,25 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
             raise TimeoutError('验证已取消')
         first = folder/'original.md'; first.write_text(original, encoding='utf-8')
         bound = load_skill(str(first), defaults)
-        if any(not str(v).strip() for v in defaults.values()):
+        if any(not str(v).strip() for k,v in defaults.items() if k not in secrets):
             raise ValueError('请先补齐流程默认参数')
         if checks is None:
             progress('正在根据原始目标制定固定验收条件…')
             report['contract_source'] = 'model'
-            checks, report['contract_note'] = prepare_contract(
-                model, {'skill': bound, 'tools': TOOL_HELP}, report['contract_attempts'], progress, stopped)
+            try:
+                checks, report['contract_note'] = prepare_contract(
+                    model, {'skill': bound, 'tools': TOOL_HELP}, report['contract_attempts'], progress, stopped)
+            except (ValueError, TypeError, RuntimeError) as exc:
+                if not trial_on_contract_failure or stopped():
+                    raise
+                checks = []
+                report['contract_note'] = str(exc)
+                report['contract_source'] = 'unavailable'
+                progress('无法制定业务验收条件，先试运行固定步骤；不会标记业务验证通过。')
         else:
             report['contract_source'] = 'provided'
-        checks = deepcopy(validate_checks(checks))
+            validate_checks(checks)
+        checks = deepcopy(validate_checks(checks)) if checks else []
         report['checks'] = checks
         write_json(folder/'checks.json', checks)
         source_files = FileOptions.from_skill(bound) if allow_files else FileOptions()
@@ -90,7 +104,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
             shutil.copy2(source, destination)
             isolated[key] = destination.resolve()
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(channel='msedge', headless=True)
+            browser = pw.chromium.launch(channel='msedge', headless=login_prompt is None, args=RESULT_ONLY_ARGS if login_prompt else [])
             try:
                 for revision in range(max_repairs+1):
                     if stopped():
@@ -98,7 +112,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                     version = folder/f'revision-{revision}.md'; version.write_text(candidate, encoding='utf-8')
                     skill = load_skill(str(version), defaults)
                     pair = []
-                    for mode in ('script', 'llm'):
+                    for mode in (('script', 'llm') if checks else ('script',)):
                         progress(f'验证第 {revision+1} 版 · {"脚本" if mode == "script" else "LLM"}模式')
                         downloads = folder/f'revision-{revision}-{mode}'/'downloads'; downloads.mkdir(parents=True)
                         context = browser.new_context(accept_downloads=True)
@@ -116,6 +130,8 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                             path_map = {str(source): str(isolated[key]) for key,source in source_files.uploads.items()}
                             policy = ApprovalPolicy('allow', skill)
                             tools = BrowserTools(page, approval=policy, file_options=options)
+                            presentation = ResultOnlyDisplay(context) if login_prompt else None
+                            tools.session.login_handler = LoginHandler(tools, skill, login_credentials, login_prompt, presentation)
                             execute = tools.execute
                             def traced(name, args):
                                 nonlocal file_calls, blocked
@@ -138,9 +154,9 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                                             mapped.append(path_map.get(str(source), str(source)))
                                         args['paths'] = mapped
                                     result = execute(name, args)
-                                if result.get('approval_denied'):
+                                if result.get('approval_denied') or result.get('login_blocked'):
                                     blocked = True
-                                records.append({'tool': name, 'args': args, 'result': result, 'url': tools.page.url})
+                                records.append(tools.session.login_handler.redact({'tool': name, 'args': args, 'result': result, 'url': tools.page.url}))
                                 return result
                             tools.execute = traced
                             with capture_progress(progress):
@@ -149,7 +165,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                             if stopped():
                                 blocked = True
                             attempt.update(result=result, evidence=evidence, observation=tools.observe(),
-                                           status='passed' if not blocked and result['status'] == 'succeeded' and evidence and all(x['ok'] for x in evidence) else 'blocked',
+                                           status=('passed' if checks else 'executed') if not blocked and result['status'] == 'succeeded' and (not checks or (evidence and all(x['ok'] for x in evidence))) else 'blocked',
                                            policy_blocked=blocked)
                         except Exception as exc:
                             attempt['error'] = f'{type(exc).__name__}: {exc}'
@@ -160,6 +176,10 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                         pair.append(attempt)
                         if attempt['status'] != 'passed':
                             break  # 脚本失败时先修复，避免 LLM 模式再做一遍文件操作。
+                    if not checks and pair and pair[-1]['status'] == 'executed':
+                        (folder/'SKILL.md').write_text(candidate, encoding='utf-8')
+                        report.update(status='executed', reason='固定步骤执行完成；缺少业务验收条件，业务结果未核验，未进行 LLM 重复执行。', revision=revision)
+                        break
                     if len(pair) == 2 and all(a['status'] == 'passed' for a in pair):
                         (folder/'SKILL.md').write_text(candidate, encoding='utf-8')
                         report.update(status='passed', reason='同一版流程在独立脚本及 LLM 会话中均通过固定验收条件', revision=revision)
@@ -173,11 +193,15 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                     diagnostic = dict(pair[-1]); diagnostic['trace'] = diagnostic.get('trace', [])[-10:]
                     state.update(diagnostic=compact(diagnostic), checks=checks, original_goal=metadata(original)['goal'])
                     raw = model.request(state, REPAIR_PROMPT)
+                    # 修复执行定义不涉及重命名；不要让模型遗漏显示名打断修复。
+                    if raw.get('status') == 'proposal':
+                        raw = {**raw, 'name': metadata(original)['name'][:80]}
+                    write_json(folder / f'repair-{revision+1}.json', raw)
                     changes = proposal(raw, candidate)
                     if changes is None:
                         report['reason'] = str(raw.get('message', '缺少修复依据')); break
                     new_meta, old_meta = metadata(changes['definition']), metadata(original)
-                    if changes['defaults'] != defaults or any(new_meta.get(k) != old_meta.get(k) for k in ('params', 'start', 'goal', 'file_params')):
+                    if changes['defaults'] != defaults or any(new_meta.get(k) != old_meta.get(k) for k in ('params', 'start', 'goal', 'file_params', 'login')):
                         raise ValueError('修复试图改变原目标、入口、参数或文件权限，未采用')
                     if changes['definition'] == candidate:
                         report['reason'] = '模型未提出有效修改，停止重复执行'; break

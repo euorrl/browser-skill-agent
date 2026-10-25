@@ -19,6 +19,7 @@ def capture_progress(sink):
 
 
 TOOL_NAMES = {
+    "login": "登录接管",
     "click": "点击", "double_click": "双击", "hover": "悬停",
     "fill": "填写", "type_text": "逐字输入", "press": "按键",
     "select": "选择下拉选项", "set_checked": "设置勾选状态",

@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import yaml
+from .login import validate_login, public_params, secret_names
 
 
 def load_skill(path: str, params: dict[str, str]) -> dict:
@@ -14,6 +15,10 @@ def load_skill(path: str, params: dict[str, str]) -> dict:
     metadata = yaml.safe_load(parts[1])
     if not isinstance(metadata, dict) or not metadata.get("name") or not metadata.get("goal"):
         raise ValueError("Skill 必须包含 name 和 goal")
+    validate_login(metadata)
+    params = dict(params)
+    for name in secret_names(metadata):params.setdefault(name, "")
+    params = public_params(metadata, params)
     missing = set(metadata.get("params", [])) - params.keys()
     if missing:
         raise ValueError(f"缺少参数：{', '.join(sorted(missing))}")

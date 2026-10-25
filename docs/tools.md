@@ -103,3 +103,7 @@ LLM 模式每轮观察前，最多等待 2 秒，寻找 DOM 连续 200 毫秒无
 ## 读取组件状态
 
 使用 `read(kind="attribute", attribute="aria-current")` 读取分页当前页标记；`aria-expanded` 表示展开，`aria-selected` 表示选中。禁用属性支持 `aria-disabled` 和 `disabled`：后者返回空字符串表示 HTML 布尔属性存在，返回 null 表示不存在，不能用字符串真假值判断。也可用 `read(kind="state")` 读取 enabled。
+
+`click` 支持 `expect_popup: true`：录制或现场确认会弹出新标签页时，先监听再点击，切换新页后执行 `wait_after`。普通点击保持原行为；超时不自动重放点击。
+
+`has_text_exact: true` 与 `has_text` 配合，对完整 DOM 文字匹配并忽略空白差异。PDF 下载完成后检查文件头；网站返回的 HTML 即使保存为 .pdf 也报失败，保留文件用于诊断。此检查不代表文档全文语义正确。下载保存完成无需再等待网页按钮恢复。

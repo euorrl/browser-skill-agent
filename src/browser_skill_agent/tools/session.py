@@ -1,6 +1,7 @@
 """管理当前标签页、框架及语义定位，不包含网站专属逻辑。"""
 
 import json
+import re
 from time import monotonic
 
 from playwright.sync_api import Page, expect
@@ -70,6 +71,8 @@ class Session:
         return frame
 
     def target(self, target: dict):
+        if "has_text_exact" in target and "has_text" not in target:
+            raise ValueError("has_text_exact 必须与 has_text 一起使用")
         scope = self.frame(target.get("frame"))
         if "within" in target:
             parent = dict(target["within"])
@@ -85,7 +88,7 @@ class Session:
         elif "id" in target:
             locator = scope.locator(f'[id={json.dumps(target["id"], ensure_ascii=False)}]')
         else:
-            for key in ("label", "placeholder", "text", "test_id"):
+            for key in ("label", "placeholder", "text", "test_id", "title"):
                 if key in target:
                     method = getattr(scope, f"get_by_{key}")
                     locator = method(target[key]) if key == "test_id" else method(target[key], exact=exact)
@@ -93,7 +96,10 @@ class Session:
             else:
                 raise ValueError("目标需要提供 role、label、placeholder、text、test_id 或实际观察到的 id")
         if "has_text" in target:
-            locator = locator.filter(has_text=target["has_text"])
+            text = target["has_text"]
+            if target.get("has_text_exact"):
+                text = re.compile(r"^\s*" + r"\s+".join(re.escape(word) for word in text.split()) + r"\s*$")
+            locator = locator.filter(has_text=text)
         if "visible" in target:
             locator = locator.filter(visible=target["visible"])
         if "nth" in target:

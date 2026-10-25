@@ -70,10 +70,10 @@ def checks(files=False):
 class FakeModel:
     def __init__(self, files=False, early=False): self.files=files;self.early=early;self.call=0;self.usage={}
     def request(self, state, prompt):
-        if prompt == CONTRACT_PROMPT: return {'checks':checks(self.files),'message':'验证最终查询结果'}
+        if prompt == CONTRACT_PROMPT: return {'coverage':{'complete':True,'missing':[]},'checks':checks(self.files),'message':'验证最终查询结果'}
         assert prompt == REPAIR_PROMPT
         skill=deepcopy(state['skill']);skill['actions'][0]['args']['target']={'id':'query'}
-        return {'status':'proposal','name':'沙箱测试','message':'根据页面 id 修正错误定位','defaults':state['defaults'],'skill':skill}
+        return {'status':'proposal','message':'根据页面 id 修正错误定位','defaults':state['defaults'],'skill':skill}
     def decide(self, state):
         self.call+=1
         if self.files and (state.get('last_stage') or {}).get('skipped', 0) == 1:
@@ -125,6 +125,14 @@ def main():
             assert len(result['attempts'])==3 and len(result['repairs'])==1
             assert path.read_text(encoding='utf-8')==original
             save_skill(path,definition(url))
+            class MissingContract(FakeModel):
+                def request(self,state,prompt):
+                    if prompt == CONTRACT_PROMPT:
+                        return {'coverage':{'complete':False,'missing':['结果缺少持久证据']},'checks':[]}
+                    return super().request(state,prompt)
+            trial=validate_flow(path,params,MissingContract(),root/'runs',max_repairs=0)
+            assert trial['status']=='executed' and len(trial['attempts'])==1,trial
+            assert trial['attempts'][0]['evidence']==[]
             result=validate_flow(path,params,FakeModel(early=True),root/'runs',checks=checks(),max_repairs=0)
             assert result['status']=='blocked' and result['attempts'][-1]['evidence'][0]['ok'] is False
             cancelled=Event();cancelled.set()
