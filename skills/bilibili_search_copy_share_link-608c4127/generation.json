@@ -1,0 +1,142 @@
+{
+  "display_name": "搜索B站视频并复制分享链接",
+  "status": "needs_evidence",
+  "evidence_map": [
+    {
+      "action_index": 1,
+      "source_actions": [],
+      "basis": "录制起始页为 bilibili.com 首页，首页入口为推断的规范化起点",
+      "side_effect": false
+    },
+    {
+      "action_index": 2,
+      "source_actions": [
+        "a1"
+      ],
+      "basis": "录制 fill 搜索框，value=video/BV1Vbnn6iEfG，参数化为 video_id",
+      "side_effect": false
+    },
+    {
+      "action_index": 3,
+      "source_actions": [
+        "a2"
+      ],
+      "basis": "录制 press Enter 提交搜索",
+      "side_effect": false
+    },
+    {
+      "action_index": 4,
+      "source_actions": [
+        "a2"
+      ],
+      "basis": "推断：等待搜索结果 URL，替代对录制新标签页 page_id 的依赖",
+      "side_effect": false
+    },
+    {
+      "action_index": 5,
+      "source_actions": [
+        "a3"
+      ],
+      "basis": "录制点击结果卡片在新标签页打开 p3（page_open，opener=p2），candidates 含完整 DOM 文字定位；等待播放器控件为推断",
+      "side_effect": false
+    },
+    {
+      "action_index": 6,
+      "source_actions": [
+        "a4"
+      ],
+      "basis": "录制点击播放/暂停按钮，业务含义按暂停播放解释",
+      "side_effect": false
+    },
+    {
+      "action_index": 7,
+      "source_actions": [
+        "a5"
+      ],
+      "basis": "录制点击 id=share-btn-outer 展开分享面板，observed_after 出现 获取视频分享链接 按钮",
+      "side_effect": false
+    },
+    {
+      "action_index": 8,
+      "source_actions": [
+        "a6"
+      ],
+      "basis": "录制点击 获取视频分享链接（has_text_exact 候选）",
+      "side_effect": false
+    },
+    {
+      "action_index": 9,
+      "source_actions": [
+        "a6"
+      ],
+      "basis": "推断：复制结果无法直接验证，读取目标视频标题作为页面状态证据",
+      "side_effect": false
+    }
+  ],
+  "assumptions": [
+    "搜索提交后打开的结果页可在脚本内通过 URL 模式等待并观察，不依赖录制 page_id",
+    "搜索结果卡片以完整 DOM 文字（含标题及数据）精确匹配目标视频",
+    "点击 播放/暂停 解释为暂停视频，避免播放干扰分享操作",
+    "搜索词参数为 BV 号本身，与录制值一致",
+    "video_title 是调用者提供的消歧输入，非由搜索词推导"
+  ],
+  "unresolved": [
+    {
+      "source_actions": [
+        "a6"
+      ],
+      "issue": "点击「获取视频分享链接」后剪贴板内容无法在浏览器内读取，复制成功缺直接证据",
+      "needed_evidence": "页面出现明确的复制成功提示文字，或运行时提供剪贴板读取能力"
+    },
+    {
+      "source_actions": [
+        "a2"
+      ],
+      "issue": "回车提交后搜索结果在新标签页打开，脚本无法按录制 page_id 匹配新标签页；当前以 URL 等待与 LLM 观察兜底，未实测",
+      "needed_evidence": "验证脚本模式下提交搜索后的标签页行为与等待条件是否成立"
+    },
+    {
+      "source_actions": [
+        "a3"
+      ],
+      "issue": "视频卡片的定位文字含播放数据（256.6万、39:29 等），会随时间变化，运行时可能不再精确匹配",
+      "needed_evidence": "补充卡片内稳定子元素的定位（如标题链接的稳定容器），或改用标题文字部分匹配并人工确认"
+    }
+  ],
+  "grounding_changes": [
+    {
+      "target": {
+        "role": "button",
+        "has_text": "获取视频分享链接",
+        "has_text_exact": true
+      },
+      "target_text": "获取视频分享链接",
+      "rule": "使用录制中完整 DOM 文字精确匹配，避免伪元素无障碍名称差异"
+    },
+    {
+      "target": {
+        "role": "button",
+        "has_text": "获取视频分享链接",
+        "has_text_exact": true
+      },
+      "target_text": "获取视频分享链接",
+      "rule": "使用录制中完整 DOM 文字精确匹配，避免伪元素无障碍名称差异"
+    }
+  ],
+  "recording_id": "20261025-155627-fcc1363c",
+  "source": "D:\\Study\\browser-skill-agent\\data\\recordings\\20261025-155627-fcc1363c",
+  "generated_at": "2026-10-25T07:58:18.556242+00:00",
+  "validated": false,
+  "usage": {
+    "prompt_tokens": 45642,
+    "completion_tokens": 4548,
+    "total_tokens": 50190,
+    "requests": 2,
+    "reported_requests": 2
+  },
+  "model": "glm-5.3-flash",
+  "format_corrections": [
+    "example_params 只能包含已声明参数的字符串示例值"
+  ],
+  "user_guidance": {}
+}
