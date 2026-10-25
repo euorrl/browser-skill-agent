@@ -59,3 +59,21 @@
 #guidanceDialog textarea{display:block;margin-top:8px;padding:10px 12px;border:1px solid #dfe5ef;border-radius:7px;min-height:78px;max-height:180px;background:white}
 
 .badge.verified{color:#24877b;background:#eaf6f3}
+
+[hidden]{display:none!important}
+#scheduleView{min-height:0;overflow:auto;flex:1;padding-bottom:20px}
+#scheduleView .section-head{display:flex;justify-content:space-between;align-items:center;gap:16px}
+#scheduleList{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:18px}
+.schedule-card{background:white;border:1px solid #e3e8f2;border-radius:14px;padding:20px;overflow-wrap:anywhere}
+.schedule-card .job-actions{margin-top:16px}.schedule-card pre{max-height:180px;overflow:auto;white-space:pre-wrap}
+#scheduleDialog{max-height:90vh;overflow:auto;width:min(560px,90vw)}
+#scheduleDialog select,#scheduleDialog input:not([type=checkbox]){display:block;width:100%;margin-top:6px;padding:10px;border:1px solid #dfe5ef;border-radius:7px;box-sizing:border-box}
+#scheduleDialog label{display:block;margin-top:14px}#scheduleDialog label.check{display:flex;gap:8px;align-items:center}
+
+.sidebar .nav{background:transparent;color:#68758a;margin-bottom:6px}
+.sidebar .nav.active{background:#eef2ff;color:var(--blue)}
+#navSchedules span:last-child{margin-left:0;background:transparent;font-size:15px;padding:0}
+.schedule-card{font-size:13px}.schedule-card .small{color:#748198;font-size:12px}
+#scheduleView>.info{font-size:12px;color:#748198;line-height:1.8;margin-top:12px}
+
+.brand{font-size:18px;gap:8px;white-space:nowrap}.brand .local{font-size:10px;white-space:nowrap}

@@ -16,17 +16,25 @@ class Navigation:
 
     def tabs(self, action="list", page_id=None, url=None):
         if action == "new":
+            display = getattr(self.s.context, '_bsa_display', None)
+            minimized = display and display.is_minimized(self.s.current())
             page = self.s.context.new_page()
             self.s.page = page
             if url:
                 self.goto(url)
+            if minimized:
+                display.conceal()
         elif action in ("switch", "close"):
             page = self.s.pages.get(page_id)
             if page is None or page.is_closed():
                 raise ValueError("标签页不存在，请使用观察中的 page_id")
             if action == "switch":
                 self.s.page = page
-                page.bring_to_front()
+                display = getattr(self.s.context, '_bsa_display', None)
+                if display:
+                    display.activate(page)
+                else:
+                    page.bring_to_front()
             else:
                 if len(self.s.context.pages) == 1:
                     raise ValueError("请保留至少一个标签页")

@@ -40,7 +40,7 @@ CLI → load_skill → 创建独立浏览器上下文
                    → 输出状态、耗时、Token → 可选显示/保留窗口 → 关闭
 ```
 
-自动创建的临时用户目录由 Playwright 管理。`--profile-dir` 显式选择固定目录时跨次保存状态，但不能同时被两个浏览器进程占用。`--result-only` 使用有界面 Edge，将窗口暂放屏幕外，最终移回，不通过重新加载页面重建结果。
+自动创建的临时用户目录由 Playwright 管理。`--profile-dir` 显式选择固定目录时跨次保存状态，但不能同时被两个浏览器进程占用。`--result-only` 使用有界面 Edge，将窗口暂时最小化，最终恢复显示，不通过重新加载页面重建结果。
 
 ## 每轮 LLM 输入
 
@@ -50,7 +50,7 @@ CLI 在工具入口安装授权策略，先审核再执行；拒绝后 Runtime �
 
 messages 每轮只有两条：
 
-1. system：中文执行规则 + 22 个工具的说明。
+1. system：中文执行规则 + 当前工具注册表对应的说明。
 2. user：当前 state 的 JSON 字符串，包括 skill、page、recent_actions、evidence、last_stage、steps_left 和兼容字段 turns_left。
 
 skill 含绑定后的元信息、stages、params 和正文 instructions，不发送脚本 actions。page 含 URL、最多 10,000 字符的自动文字快照、truncated、标签页和框架编号、最近弹窗记录及 readiness。recent_actions 只保留最近六次操作与工具结果，长 data 以最多 800 字符预览发送并标记 data_truncated，最早的一条可能是入口导航。
@@ -81,7 +81,7 @@ Skill stages 的 goal/evidence/observe_when 提供阶段建议；模型返回的
 {"tool":"finish","args":{"status":"succeeded","message":"中文结果说明"}}
 ```
 
-finish 不属于工具库的 22 个工具，必须单独返回，不能混入批次。整个批次在开始前检查格式与步数；超出剩余预算的计划不执行并计一次无效计划，防止无限请求。每个实际工具调用计一步，finish 也计一步，未执行的批次尾部不计步。最终 turns/llm_calls 表示模型调用数，steps 表示已用预算。
+finish 不属于浏览器工具库，必须单独返回，不能混入批次。整个批次在开始前检查格式与步数；超出剩余预算的计划不执行并计一次无效计划，防止无限请求。每个实际工具调用计一步，finish 也计一步，未执行的批次尾部不计步。最终 turns/llm_calls 表示模型调用数，steps 表示已用预算。
 
 read/snapshot/locate 默认不打断阶段，可连续收集多份证据并执行其后已知且不依赖新结果的操作。完整计划执行后统一交回模型；动作顶层 observe_after:true 可显式提前观察，尾部计划会被丢弃而不是自动续跑。后续目标或分支依赖新读取时，应把该读取放在阶段末尾或设置此标记。获准的关键操作及操作/等待失败仍结束阶段。导航或标签页变化默认也结束阶段，但预期导航可以继续：动作顶层声明 expected_url（fnmatch 风格的 * 通配 URL，区分大小写），实际 URL 匹配且 args.wait_after 成功，并且没有意外标签页变化。仅同一页导航和显式 tabs new/switch 可采用此例外，意外弹窗仍中断。该声明是模型规划信息，不是权限授权，也不能绕过授权闸门；宽泛 URL 和通用等待不能证明业务目标达成。
 
@@ -107,4 +107,4 @@ readiness 在模型观察前最多等待 2 秒，尝试找到 200 毫秒 DOM 安
 
 ## 录制入口
 
-`record` 子入口启动独立的可见浏览器与本地控制页，不经过 Skill Runtime 或模型。控制命令只接受来自控制页主框架的调用，任务页面的事件只写入所属录制会话。完成、放弃和中断状态与任务执行成功不是同一含义。参数提取和 Skill 生成尚未接入，详见 [录制指南](recording.md)。
+`record` 子入口启动独立的可见浏览器与本地控制页，不经过 Skill Runtime 或模型。控制命令只接受来自控制页主框架的调用，任务页面的事件只写入所属录制会话。完成、放弃和中断状态与任务执行成功不是同一含义。独立 record 命令只保存录制；generate 命令及工作台后续调用负责参数提取和 Skill 生成，详见[录制指南](recording.md)和[生成说明](generation.md)。

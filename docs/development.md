@@ -7,6 +7,8 @@
 ```powershell
 .\.venv\Scripts\python tests/recording.py
 .\.venv\Scripts\python tests/generation.py
+.\.venv\Scripts\python tests/sandbox_contract.py
+.\.venv\Scripts\python tests/studio_schedules.py
 .\.venv\Scripts\python tests/studio.py
 .\.venv\Scripts\python tests/smoke.py
 .\.venv\Scripts\python tests/llm_batches.py
@@ -27,6 +29,8 @@ git diff --check
 | stage_navigation.py | 预期导航及新建/切换标签页连续读取，URL 不符、等待缺失/失败和意外弹窗中断 |
 | approval.py | 三种授权策略、拒绝无副作用、对象变化、批次停止和审核 Token |
 | recording.py | 录制控制、用户事件、动态状态、文件、跨源框架、重启隔离和密码遮蔽 |
+| studio_schedules.py | 计划配置、持久化、到期实际执行、单次触发、排队过期、定义变更和工作台界面 |
+| sandbox_contract.py | 验收响应、任务覆盖、等价表达和无效条件处理 |
 | generation.py | 录制摘要、模型 HTTP 模拟、草稿加载与参数替换、工具签名和证据引用 |
 | smoke.py | Skill 参数绑定、模型 HTTP 适配、工具错误回传和执行次数上限 |
 | browser_tools.py | 原生/自定义下拉、容器定位、iframe、标签页、弹窗、上传下载 |
@@ -34,7 +38,7 @@ git diff --check
 | dynamic_page.py | DOM 替换、隐藏副本、延迟启用、遮挡、列表重排及等待失败不重放 |
 | script_mode.py | 默认无密钥 CLI、动态响应等待、脚本中止、Token 累计和缺失统计 |
 | browser_lifecycle.py | 结果先输出、保留/关闭窗口、并发独立会话、固定目录和 CLI 显示模式 |
-| browser_display.py | 屏幕外执行、标签页切换、结束后恢复窗口且保留 DOM/输入值 |
+| browser_display.py | 最小化执行、手动恢复、标签页与弹窗处理、结束后保留 DOM/输入值 |
 
 后两项会短暂显示测试窗口，测试结束自行关闭。测试不是产品运行时的独立业务检查器，也不能保证任意线上网站或模型均可完成任务。
 

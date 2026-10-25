@@ -12,6 +12,7 @@ function render(){
  $('count').textContent=$('navCount').textContent=state.flows.length;
  const signature=JSON.stringify(state.flows)+$('search').value+$('filter').value;
  if(signature!==lastList){lastList=signature;renderCards();}
+ renderSchedules();
  renderJob(state.job);
  if(state.pending){pendingId=state.pending.id;$('approvalDialog').querySelector('h2').textContent=state.pending.kind==='login'?'需要登录':'此操作需要你的确认';$('approve').textContent=state.pending.kind==='login'?'登录完成，继续':'允许操作';$('deny').textContent=state.pending.kind==='login'?'停止任务':'拒绝';$('approvalDialog').querySelector('p.small').textContent=state.pending.kind==='login'?'请在已显示的任务浏览器登录；继续前会检查页面状态。':'仅批准当前这一次操作。';$('approvalMessage').textContent=state.pending.message;$('approvalDetails').textContent=JSON.stringify(state.pending.details,null,2);if(!$('approvalDialog').open)$('approvalDialog').showModal();}
  else if($('approvalDialog').open){$('approvalDialog').close();pendingId=null;}
@@ -117,7 +118,7 @@ $('chatForm').onsubmit=async e=>{e.preventDefault();if(chatting)return;const tex
  catch{waiting.textContent='暂时无法完成匹配。你仍可在左侧直接选择流程。';}finally{chatting=false;$('send').disabled=false;$('messages').scrollTop=$('messages').scrollHeight;}};
 document.querySelectorAll('.suggestion').forEach(b=>b.onclick=()=>{$('chatInput').value=b.dataset.text;$('chatInput').focus();});
 $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('chatForm').requestSubmit();}});
-refresh();setInterval(refresh,1000);
+
 
 $('approvalMode').onchange=()=>{$('approvalHint').textContent=({human:'搜索、筛选和普通导航直接执行；关键操作在此确认。',ai:'关键操作由模型审核，会发送相关页面信息并消耗 Token。',allow:'本次流程的所有操作均直接执行，包括提交、上传、删除等。'})[$('approvalMode').value];};
 
@@ -138,3 +139,59 @@ function renderEdit(result){
 
 $('validateFlow').onclick=()=>{$('validationFiles').checked=true;$('validationDialog').showModal();};
 $('startValidation').onclick=async()=>{try{await api('validate',{id:selected.id,allow_files:$('validationFiles').checked});$('validationDialog').close();$('flowDialog').close();await refresh();}catch{}};
+
+// 单次定时计划使用独立表单，不与立即运行的临时参数混用。
+let editingSchedule=null, scheduleSignature='';
+const scheduleStatus={scheduled:'待执行',paused:'已暂停',waiting:'等待空闲',running:'执行中',completed:'执行完成',failed:'执行失败',missed:'已过期',interrupted:'执行中断',cancelled:'已取消'};
+function scheduleView(show){
+ $('scheduleView').hidden=!show;
+ document.querySelector('.layout').hidden=show;
+ document.querySelector('.heading').hidden=show;
+ $('navSchedules').classList.toggle('active',show);$('navFlows').classList.toggle('active',!show);
+ document.querySelector('main header>span').textContent='工作台 / '+(show?'计划与定时':'我的流程');
+}
+$('navSchedules').onclick=()=>scheduleView(true);$('navFlows').onclick=()=>scheduleView(false);
+function renderSchedules(){
+ const signature=JSON.stringify(state.schedules||[]);if(signature===scheduleSignature)return;scheduleSignature=signature;
+ const list=$('scheduleList');list.replaceChildren();
+ if(!(state.schedules||[]).length){list.append(node('p','muted','还没有计划。选择一个流程并配置参数后，即可安排执行时间。'));return;}
+ for(const plan of [...state.schedules].sort((a,b)=>a.at.localeCompare(b.at))){
+  const card=node('article','schedule-card'),top=node('div','job-bar'),actions=node('div','job-actions');
+  top.append(node('strong','',plan.name),node('span','badge',scheduleStatus[plan.status]||plan.status));card.append(top);
+  card.append(node('p','',new Date(plan.at).toLocaleString()+' · 单次执行'));
+  card.append(node('p','small',`${plan.llm?'LLM 运行':'固定步骤'} · ${plan.background?'后台运行':'显示浏览器'} · ${{human:'人工授权',ai:'AI 授权',allow:'全部允许'}[plan.approval]} · ${plan.close_after?'结束后关闭':'结束后保留浏览器'}`));
+  const detail=node('details'),values=node('pre');detail.append(node('summary','','查看运行参数'));values.textContent=Object.entries(plan.params).map(([k,v])=>`${labels[k]||k}：${v||'本次会话提供'}`).join('\n')||'无需参数';detail.append(values);card.append(detail);
+  if(plan.message)card.append(node('p','small',plan.message));
+  if(plan.status!=='running')button(actions,'修改计划',()=>openSchedule(plan));
+  if(['scheduled','waiting'].includes(plan.status))button(actions,'暂停',()=>api('schedule_pause',{id:plan.id}).then(refresh));
+  if(plan.status!=='running')button(actions,'删除',()=>confirm('删除计划？','仅删除此计划，保留关联流程。',()=>api('schedule_delete',{id:plan.id}).then(refresh)));
+  if(state.job?.schedule_id===plan.id)button(actions,'查看运行日志',()=>scheduleView(false),'primary');
+  card.append(actions);list.append(card);
+ }
+}
+function scheduleParameterFields(values){
+ const flow=state.flows.find(f=>f.id===$('scheduleFlow').value),container=$('scheduleParams');container.replaceChildren();
+ if(!flow)return;
+ for(const [key,value] of Object.entries(values||flow.defaults)){
+  if(flow.secret_params?.includes(key))continue;
+  const label=node('label','',labels[key]||key),input=node('input');input.dataset.param=key;input.value=value;input.required=true;label.append(input);container.append(label);
+ }
+}
+function openSchedule(plan=null){
+ if(!state.flows.length){toast('请先创建一个流程');return;}
+ editingSchedule=plan?.id||null;
+ $('scheduleFlow').replaceChildren(...state.flows.map(f=>{const o=node('option','',f.name);o.value=f.id;return o;}));
+ if(plan){if(!state.flows.some(f=>f.id===plan.flow_id)){toast('关联流程已删除，请新建计划');return;}$('scheduleFlow').value=plan.flow_id;}
+ scheduleParameterFields(plan?.params);
+ const time=plan?new Date(plan.at):new Date(Date.now()+3600000);time.setMinutes(time.getMinutes()-time.getTimezoneOffset());$('scheduleAt').value=time.toISOString().slice(0,16);
+ $('scheduleApproval').value=plan?.approval||'human';$('scheduleLlm').checked=plan?.llm||false;$('scheduleBackground').checked=plan?.background||false;$('scheduleClose').checked=plan?.close_after??true;$('scheduleEnabled').checked=plan?!['paused','cancelled'].includes(plan.status):true;
+ $('scheduleDialog').showModal();
+}
+$('newSchedule').onclick=()=>openSchedule();$('scheduleFlow').onchange=()=>scheduleParameterFields();
+$('scheduleForm').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{
+ const flow=state.flows.find(f=>f.id===$('scheduleFlow').value),params=parameters('scheduleParams');for(const key of flow.secret_params||[])params[key]='';
+ await api('schedule_save',{id:editingSchedule,flow_id:flow.id,params,at:new Date($('scheduleAt').value).toISOString(),approval:$('scheduleApproval').value,llm:$('scheduleLlm').checked,background:$('scheduleBackground').checked,close_after:$('scheduleClose').checked,enabled:$('scheduleEnabled').checked});
+ $('scheduleDialog').close();toast('计划已保存');await refresh();
+ }catch{}finally{b.disabled=false;}};
+
+refresh();setInterval(refresh,1000);

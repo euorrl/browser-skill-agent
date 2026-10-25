@@ -56,6 +56,8 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
     file_calls = 0
     file_limit = 2 * sum(a.get('tool') in {'upload', 'download'} for a in metadata(original)['actions']) if allow_files else 0
     report['file_budget'] = file_limit
+    report['file_budget_scope'] = 'revision'
+    report['allow_files'] = allow_files
     def stopped():
         return (cancel is not None and cancel.is_set()) or monotonic() > deadline
     class BoundedModel:
@@ -95,6 +97,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
         checks = deepcopy(validate_checks(checks)) if checks else []
         report['checks'] = checks
         write_json(folder/'checks.json', checks)
+        progress('自动验证授权：全部允许；' + ('上传下载已启用，每个修复版本独立计算文件次数。' if allow_files else '本次明确禁用上传下载。'))
         source_files = FileOptions.from_skill(bound) if allow_files else FileOptions()
         # 一次复制指定文件；每轮上传仅能读这些副本，下载始终写入本轮独立目录。
         isolated = {}
@@ -112,6 +115,9 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                     version = folder/f'revision-{revision}.md'; version.write_text(candidate, encoding='utf-8')
                     skill = load_skill(str(version), defaults)
                     pair = []
+                    revision_file_calls = 0
+                    file_limit = 2 * sum(a.get('tool') in {'upload', 'download'} for a in skill['actions']) if allow_files else 0
+                    report['file_budget'] = file_limit
                     for mode in (('script', 'llm') if checks else ('script',)):
                         progress(f'验证第 {revision+1} 版 · {"脚本" if mode == "script" else "LLM"}模式')
                         downloads = folder/f'revision-{revision}-{mode}'/'downloads'; downloads.mkdir(parents=True)
@@ -134,17 +140,18 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                             tools.session.login_handler = LoginHandler(tools, skill, login_credentials, login_prompt, presentation)
                             execute = tools.execute
                             def traced(name, args):
-                                nonlocal file_calls, blocked
+                                nonlocal file_calls, revision_file_calls, blocked
                                 args = deepcopy(args)
                                 if stopped():
                                     blocked = True
                                     result = {'ok': False, 'approval_denied': True, 'error': '已取消或达到时间预算'}
-                                elif name in {'upload', 'download'} and file_calls >= file_limit:
+                                elif name in {'upload', 'download'} and (not allow_files or revision_file_calls >= file_limit):
                                     blocked = True
-                                    result = {'ok': False, 'approval_denied': True, 'error': '文件操作未启用或已达到本次重复预算，需人工确认后另行验证'}
+                                    result = {'ok': False, 'file_policy_blocked': True, 'error': '本次验证已禁用文件操作，请启用后重试。' if not allow_files else '当前版本的文件操作次数已达上限；这是重复执行限制，不是浏览器下载权限不足。'}
                                 else:
                                     if name in {'upload', 'download'}:
                                         file_calls += 1
+                                        revision_file_calls += 1
                                     if name == 'upload' and 'paths' in args:
                                         values = args['paths'] if isinstance(args['paths'], list) else [args['paths']]
                                         mapped = []
@@ -166,7 +173,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                                 blocked = True
                             attempt.update(result=result, evidence=evidence, observation=tools.observe(),
                                            status=('passed' if checks else 'executed') if not blocked and result['status'] == 'succeeded' and (not checks or (evidence and all(x['ok'] for x in evidence))) else 'blocked',
-                                           policy_blocked=blocked)
+                                           policy_blocked=blocked, file_calls=revision_file_calls)
                         except Exception as exc:
                             attempt['error'] = f'{type(exc).__name__}: {exc}'
                             attempt['policy_blocked'] = blocked

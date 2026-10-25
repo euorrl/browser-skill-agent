@@ -10,11 +10,15 @@ class Actions:
             raise ValueError("expect_popup 必须为布尔值")
         locator = self.s.prepare(target)
         if expect_popup:
+            display = getattr(self.s.context, '_bsa_display', None)
+            minimized = display and display.is_minimized(self.s.current())
             with self.s.current().expect_popup() as pending:
                 locator.click(button=button)
             self.s.page = pending.value
             self.s.register_page(self.s.page)
             self.s.page.wait_for_load_state("domcontentloaded")
+            if minimized:
+                display.conceal()
         else:
             locator.click(button=button)
 
@@ -36,11 +40,15 @@ class Actions:
             raise ValueError("expect_popup 必须为布尔值")
         locator = self.s.prepare(target)
         if expect_popup:
+            display = getattr(self.s.context, '_bsa_display', None)
+            minimized = display and display.is_minimized(self.s.current())
             with self.s.current().expect_popup() as pending:
                 locator.press(key)
             self.s.page = pending.value
             self.s.register_page(self.s.page)
             self.s.page.wait_for_load_state("domcontentloaded")
+            if minimized:
+                display.conceal()
         else:
             locator.press(key)
 

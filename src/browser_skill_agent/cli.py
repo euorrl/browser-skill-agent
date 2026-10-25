@@ -54,7 +54,7 @@ def main() -> int:
     parser.add_argument("--max-steps", type=int, default=30, help="最大执行步数，LLM 模式含 finish 和无效计划，默认 30")
     display = parser.add_mutually_exclusive_group()
     display.add_argument("--headless", action="store_true", help="后台运行；需要人工登录时显示同一浏览器，结束后关闭")
-    display.add_argument("--result-only", action="store_true", help="执行期间窗口位于屏幕外，结束后显示最终页面")
+    display.add_argument("--result-only", action="store_true", help="执行期间窗口最小化，可从任务栏恢复，结束后显示最终页面")
     parser.add_argument("--keep-open", action=argparse.BooleanOptionalAction, default=True,
                         help="默认结束后保留可见浏览器，回车关闭；--no-keep-open 自动关闭，无界面模式不等待")
     parser.add_argument("--json", action="store_true", help="将最终结果输出为 JSON，供其他程序读取")
@@ -143,14 +143,11 @@ def main() -> int:
 
                     def show_for_approval(active_page):
                         if presentation:
-                            for tab in context.pages:
-                                presentation.bounds(tab, 80, 60)
-                            active_page.bring_to_front()
+                            presentation.reveal(active_page)
 
                     def hide_after_approval():
                         if presentation:
-                            for tab in context.pages:
-                                presentation.hide(tab)
+                            presentation.conceal()
 
                     policy = ApprovalPolicy(args.approval, skill, model.review if model else None,
                                             show_for_approval, hide_after_approval)

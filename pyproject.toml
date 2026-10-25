@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "browser-skill-agent"
 version = "0.1.0"
-description = "由文字 Skill 驱动的极简浏览器 Agent"
+description = "基于 Playwright 的浏览器流程录制、生成与执行工具"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

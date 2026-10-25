@@ -29,6 +29,8 @@ from ..skill import load_skill
 from ..tools import BrowserTools
 from ..tools.files import FileOptions
 from .store import Store, metadata
+from .schedules import Schedules, utcnow
+from datetime import datetime
 from .editing import EDIT_PROMPT, edit_input, proposal
 
 ASSETS = Path(__file__).parent
@@ -43,6 +45,8 @@ class Studio:
     def __init__(self, root):
         self.root = Path(root)
         self.store = Store(root)
+        self.schedules = Schedules(self.root, self.store)
+        self.active_schedule = None
         self.job = None
         self.worker = None
         self.recorder = None
@@ -67,10 +71,59 @@ class Studio:
         return GenerationModel(client, *values, progress=progress)
 
     def state(self):
-        return {"flows": self.store.items, "job": self.job, "pending": self.pending,
+        return {"flows": self.store.items, "schedules": self.schedules.items, "job": self.job, "pending": self.pending,
                 "recording": self.recorder.status() if self.recorder else None}
 
+    def finish_schedule(self):
+        if self.active_schedule and self.job and self.job['state'] in ('done', 'blocked', 'failed', 'cancelled'):
+            item = self.schedules.get(self.active_schedule)
+            item.update(status='completed' if self.job['state'] == 'done' else 'failed',
+                        message=self.job.get('message', ''), finished_at=utcnow().isoformat())
+            self.schedules.save()
+            self.active_schedule = None
+
+    async def tick_schedules(self):
+        self.finish_schedule()
+        if self.closing:
+            return
+        for item in sorted(self.schedules.items, key=lambda x: x['at']):
+            if item['status'] not in ('scheduled', 'waiting') or datetime.fromisoformat(item['at']) > utcnow():
+                continue
+            if (utcnow() - datetime.fromisoformat(item['at'])).total_seconds() > 300:
+                item.update(status='missed', message='已超过触发时间 5 分钟，请重新安排。')
+                self.schedules.save()
+                continue
+            if self.worker and not self.worker.done():
+                if item['status'] != 'waiting':
+                    item.update(status='waiting', message='等待当前任务结束或关闭任务浏览器；最多等待至计划时间后 5 分钟。')
+                    self.schedules.save()
+                return
+            try:
+                flow = self.store.get(item['flow_id'])
+                if self.schedules.fingerprint(flow['id']) != item['fingerprint']:
+                    raise ValueError('流程定义已修改，请重新检查参数和运行选项后保存计划。')
+                if any(not self.credentials.get(flow['id'], {}).get(k) for k in flow.get('secret_params', [])):
+                    raise ValueError('本次会话缺少登录密码，请填写后重新安排计划。')
+                if item['llm'] or item['approval'] == 'ai':
+                    self.model(None)
+                item.update(status='running', message='已触发', started_at=utcnow().isoformat())
+                self.schedules.save()  # 先落盘，退出后不重复触发。
+                self.launch('run', self.execute(flow['id'], item['params'], item['close_after'],
+                            item['approval'], item['llm'], item['background']), flow['id'])
+                self.active_schedule = item['id']
+                self.job['schedule_id'] = item['id']
+            except Exception as exc:
+                item.update(status='failed', message=str(exc))
+                self.schedules.save()
+            return
+
+    async def schedule_loop(self):
+        while not self.closing:
+            await self.tick_schedules()
+            await asyncio.sleep(1)
+
     def launch(self, kind, coroutine, flow_id=None):
+        self.finish_schedule()
         if self.worker and not self.worker.done():
             coroutine.close()
             raise ValueError("当前任务尚未结束，请先完成或关闭任务浏览器。")
@@ -216,7 +269,7 @@ class Studio:
             job.update(state="blocked", message="草稿已保存，但录制有未识别的图标点击（" + ', '.join(report['blocking_recording_gaps']) + "）。无法确认完整任务，未启动自动验证。请重新录制该操作，并说明最终目标；不能将已完成的部分步骤算作整个任务完成。")
             return
         if job.get("auto_validate"):
-            await self.validate(item["id"])
+            await self.validate(item["id"], allow_files=True)
 
 
     async def validate(self, ident, allow_files=True):
@@ -233,7 +286,7 @@ class Studio:
         loop = asyncio.get_running_loop()
         def login_prompt(message, details):
             return asyncio.run_coroutine_threadsafe(self.ask(message, details, "login"), loop).result()
-        self.job.update(state="validating", flow_id=ident, name=item["name"], message="正在准备后台验证…")
+        self.job.update(state="validating", flow_id=ident, name=item["name"], message="正在准备后台验证（全部允许）…", approval="allow", allow_files=allow_files)
         def progress(text):
             self.job["message"] = text
             self.log(text)
@@ -289,7 +342,7 @@ class Studio:
             return asyncio.run_coroutine_threadsafe(self.ask(message, details, "login"), loop).result()
         def task():
             with sync_playwright() as pw, (httpx.Client(timeout=300) if needs_model else nullcontext()) as client:
-                context = pw.chromium.launch_persistent_context("", channel="msedge", headless=False, args=RESULT_ONLY_ARGS if background else [])
+                context = pw.chromium.launch_persistent_context("", channel="msedge", headless=False, accept_downloads=True, args=RESULT_ONLY_ARGS if background else [])
                 try:
                     model = self.model(client, lambda text: self.job.update(message="模型处理中：" + text)) if needs_model else None
                     policy = ApprovalPolicy(approval, skill, reviewer=model.review if model else None, human_prompt=human)
@@ -411,9 +464,21 @@ class Studio:
             return {"error": "仅本地工作台可执行命令"}
         data = data or {}
         try:
-            if command == "state":
+            if command == "schedule_save":
+                if data.get('llm') or data.get('approval') == 'ai':
+                    self.model(None)
+                self.schedules.put(data)
+            elif command == "schedule_delete":
+                self.schedules.remove(data['id'])
+            elif command == "schedule_pause":
+                item = self.schedules.get(data['id'])
+                if item['status'] not in ('scheduled', 'waiting'):
+                    raise ValueError('仅待执行计划可以暂停。')
+                item.update(status='paused', message='已暂停')
+                self.schedules.save()
+            elif command == "state":
                 return self.state()
-            if command == "record":
+            elif command == "record":
                 self.model(None)  # 提前检查配置，避免录完才发现无法生成。
                 self.launch("record", self.record(str(data.get("url", "")), str(data.get("name", "")).strip()))
                 self.job["auto_validate"] = data.get("auto_validate") is True
@@ -484,6 +549,10 @@ class Studio:
                     raise ValueError("请在当前任务结束并关闭任务浏览器后编辑流程。")
                 if command == "delete":
                     self.store.delete(data["id"])
+                    for plan in self.schedules.items:
+                        if plan['flow_id'] == data['id'] and plan['status'] in ('scheduled', 'waiting', 'paused'):
+                            plan.update(status='cancelled', message='关联流程已删除。')
+                    self.schedules.save()
                     self.credentials.pop(data["id"], None)
                     if self.job and self.job.get("flow_id") == data["id"]:
                         self.job = None
@@ -514,10 +583,14 @@ class Studio:
             await self.page.goto((ASSETS / "index.html").as_uri())
             context.on("close", lambda *_: self.closed.set())
             self.page.on("close", lambda *_: self.closed.set())
+            scheduler = asyncio.create_task(self.schedule_loop())
             try:
                 await self.closed.wait()
             finally:
+                self.finish_schedule()
                 self.closing = True
+                scheduler.cancel()
+                await asyncio.gather(scheduler, return_exceptions=True)
                 self.credentials.clear()
                 self.validation_cancel.set()
                 if self.guidance_answer and not self.guidance_answer.done():

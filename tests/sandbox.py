@@ -145,6 +145,20 @@ def main():
             passed=validate_flow(path,params,FakeModel(files=True),root/'runs',checks=checks(True),allow_files=True)
             assert passed['status']=='passed' and passed['file_calls']==4,passed
             assert len(list(Path(passed['folder']).glob('revision-*/downloads/result.txt')))==2
+            # 文件操作完成后的步骤失败，修复版仍有完整的脚本+LLM文件额度。
+            broken=definition(url,files=True)
+            broken['actions'].append({'tool':'wait_for','args':{'target':{'id':'missing'},'state':'visible','timeout':0.1}})
+            save_skill(path,broken)
+            class RepairAfterDownload(FakeModel):
+                def request(self,state,prompt):
+                    result=super().request(state,prompt)
+                    if prompt == REPAIR_PROMPT:
+                        result['skill']['actions'][-1]['args']={'target':{'id':'result'},'state':'visible','timeout':1}
+                    return result
+            repaired=validate_flow(path,params,RepairAfterDownload(files=True),root/'runs',checks=checks(True),max_repairs=1)
+            assert repaired['status']=='passed' and repaired['file_calls']==6,repaired
+            assert repaired['approval']=='allow' and repaired['allow_files'] is True
+            save_skill(path,definition(url,files=True))
             bad=checks(True);bad[-1]['min_bytes']=999999
             limited=validate_flow(path,params,FakeModel(files=True),root/'runs',checks=bad,allow_files=True)
             assert limited['status']=='blocked' and limited['file_calls']<=4
