@@ -50,6 +50,9 @@ async def main():
         root = Path(temporary)
         page_path, definition = fixture(root)
         app = Studio(root)
+        async def skip_validation(*args, **kwargs):
+            app.job.update(state="done", message="测试替身：验证由 sandbox 测试覆盖")
+        app.validate = skip_validation
         item = app.store.items[0]
         assert item["defaults"] == {"query": "人工智能"}
         async with async_playwright() as pw:
@@ -80,7 +83,7 @@ async def main():
             await page.locator('#send').click()
             await page.get_by_role('button', name='检查参数并运行', exact=True).click()
             assert await page.locator('#params input').input_value() == '自然语言参数'
-            assert app.worker is None
+            assert app.worker is None or app.worker.done()
             await page.locator('#flowDialog .icon.close').click()
             await app.chat('沿用刚才的参数')
             assert requests[-1]['history']

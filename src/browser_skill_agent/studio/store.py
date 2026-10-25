@@ -1,6 +1,7 @@
-"""流程名称、默认参数及内部执行文件；不修改原始录制和示例。"""
+"""工作台索引保存显示信息，skills/ 保存唯一的执行定义。"""
 import json
 import re
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -29,7 +30,10 @@ def metadata(text):
 
 class Store:
     def __init__(self, root):
-        self.root = Path(root) / "data" / "flows"
+        self.project = Path(root).resolve()
+        self.skills = self.project / "skills"
+        self.skills.mkdir(parents=True, exist_ok=True)
+        self.root = self.project / "data" / "flows"
         self.root.mkdir(parents=True, exist_ok=True)
         self.index = self.root / "index.json"
         self.items = json.loads(self.index.read_text(encoding="utf-8")) if self.index.exists() else []
@@ -45,6 +49,9 @@ class Store:
             # 为早期自动导入的长标题补上显示名；用户自行改过的名字不变。
             changed = False
             for item in self.items:
+                if "skill_path" not in item:
+                    self.migrate(item)
+                    changed = True
                 meta = metadata(self.path(item["id"]).read_text(encoding="utf-8"))
                 legacy = re.sub(r"{{.*?}}", "指定内容", meta.get("goal", "未命名流程"))[:28]
                 if item["name"] == legacy and meta.get("name") in DISPLAY_NAMES:
@@ -66,11 +73,41 @@ class Store:
         raise ValueError("流程不存在或已删除")
 
     def path(self, ident):
-        self.get(ident)
-        return self.root / ident / "SKILL.md"
+        item = self.get(ident)
+        path = (self.project / item["skill_path"]).resolve()
+        if not path.is_relative_to(self.skills) or path.name != "SKILL.md":
+            raise ValueError("流程定义必须位于项目 skills/ 目录")
+        return path
+
+    def migrate(self, item):
+        """迁移当前仍在目录中的流程；旧文件保留作备份，不恢复已删除项。"""
+        old = self.root / item["id"] / "SKILL.md"
+        text = old.read_text(encoding="utf-8")
+        meta = metadata(text)
+        claimed = {entry.get("skill_path") for entry in self.items}
+        matches = [p for p in self.skills.glob("*/SKILL.md")
+                   if p.relative_to(self.project).as_posix() not in claimed
+                   and metadata(p.read_text(encoding="utf-8-sig")).get("name") == meta.get("name")]
+        destination = matches[0] if len(matches) == 1 else self.new_path(meta, item["id"])
+        destination.write_text(text, encoding="utf-8")
+        item["skill_path"] = destination.relative_to(self.project).as_posix()
+        self.write_defaults(item)
+
+    def new_path(self, meta, ident):
+        name = re.sub(r"[^a-zA-Z0-9_-]", "_", str(meta.get("name", "flow")))[:80] or "flow"
+        folder = self.skills / (name + "-" + ident[:8])
+        folder.mkdir(exist_ok=False)
+        return folder / "SKILL.md"
+
+    def write_defaults(self, item):
+        path = self.path(item["id"]).parent / "example_params.json"
+        path.write_text(json.dumps(item["defaults"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     def add(self, path, name=None):
-        path = Path(path)
+        path = Path(path).resolve()
+        for item in self.items:
+            if item.get("skill_path") and self.path(item["id"]) == path:
+                return item
         text = path.read_text(encoding="utf-8-sig")
         meta = metadata(text)
         example = path.parent / "example_params.json"
@@ -82,10 +119,16 @@ class Store:
         item = {"id": ident, "name": title, "description": meta.get("description", meta.get("goal", "")),
                 "defaults": {p: str(defaults.get(p, "")) for p in meta.get("params", [])},
                 "status": "unverified", "issues": report.get("unresolved", []), "last_result": None}
-        folder = self.root / ident
-        folder.mkdir()
-        (folder / "SKILL.md").write_text(text, encoding="utf-8")
+        destination = path if path.is_relative_to(self.skills) and path.name == "SKILL.md" else self.new_path(meta, ident)
+        if destination != path:
+            destination.write_text(text, encoding="utf-8")
+            for filename in ("generation.json",):
+                source = path.parent / filename
+                if source.exists():
+                    shutil.copy2(source, destination.parent / filename)
+        item["skill_path"] = destination.relative_to(self.project).as_posix()
         self.items.append(item)
+        self.write_defaults(item)
         self.save()
         return item
 
@@ -102,11 +145,19 @@ class Store:
         if text is not None:
             self.path(ident).write_text(text, encoding="utf-8")
             item["status"] = "unverified"
+            item["description"] = meta.get("description", meta.get("goal", ""))
+            item["last_result"] = None
+            item.pop("validation", None)
+        if defaults != item["defaults"]:
+            item["status"] = "unverified"
+            item["last_result"] = None
+            item.pop("validation", None)
         item.update(name=name, defaults={p: str(defaults.get(p, "")) for p in meta.get("params", [])})
+        self.write_defaults(item)
         self.save()
         return item
 
     def delete(self, ident):
         self.get(ident)
         self.items = [x for x in self.items if x["id"] != ident]
-        self.save()  # 从流程库移除；原始录制与生成产物保留。
+        self.save()  # 仅从工作台移除；skills 中的文件仍可通过 CLI 使用。

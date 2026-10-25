@@ -84,3 +84,5 @@ git diff --check
 建议使用 Conventional Commits：功能使用 `feat`，行为修正使用 `fix`，仅文档调整使用 `docs`。标题写具体改变，正文说明执行边界与验证结果，不将重测通过写成首次全部成功，也不将局部文件核验通过写成整轮模型任务成功。
 
 提交前检查 diff、测试结果和暂存范围。暂存、提交和推送是独立操作，文档中的命令示例不是自动执行指令。
+
+后台验证与工作台自动触发测试：`python tests/sandbox.py`、`python tests/studio_validation.py`。真实模型端到端测试：`python tests/sandbox.py --live`，会产生 Token 用量。

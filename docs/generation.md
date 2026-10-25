@@ -14,7 +14,7 @@
 
 模型读取超时及流式接收过程的总时长检查默认 300 秒，可用 `--timeout 600` 调整。总时长在收到数据时检查，阻塞读取仍受读取超时限制。请求失败不会自动重试；超时不意味着服务端未处理或未计费，未返回用量时不能判断 Token 消耗。
 
-默认输出到 `data/generated/<skill名称>-<随机编号>/`，不会覆盖已有 Skill。可使用 `--output-dir skills/drafts` 更换父目录；指定目录会保存含演示值的文件，提交前请检查内容。
+默认输出到 `skills/<skill名称>-<随机编号>/`，不会覆盖已有 Skill。可使用 `--output-dir` 显式更换父目录；指定目录会保存含演示值的文件，提交前请检查内容。
 
 生成目录包含：
 
@@ -47,8 +47,8 @@
 生成完成后查看报告，按照 `example_params.json` 手动传入参数，使用原有命令测试。例如：
 
 ```powershell
-.\.venv\Scripts\python -m browser_skill_agent data/generated/<名称>/SKILL.md --param "query=示例"
-.\.venv\Scripts\python -m browser_skill_agent data/generated/<名称>/SKILL.md --param "query=示例" --llm
+.\.venv\Scripts\python -m browser_skill_agent skills/<名称>/SKILL.md --param "query=示例"
+.\.venv\Scripts\python -m browser_skill_agent skills/<名称>/SKILL.md --param "query=示例" --llm
 ```
 
 参数名取决于实际生成结果。需要证据补充或缺少 runtime 能力的草稿应先修正，不能因为文件已生成就认为两种模式可运行。上传、发送等操作仍使用现有授权策略。

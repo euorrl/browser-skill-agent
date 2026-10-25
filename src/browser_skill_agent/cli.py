@@ -31,6 +31,9 @@ def parameter(text: str) -> tuple[str, str]:
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "validate":
+        from .sandbox.cli import main as validate_main
+        return validate_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "studio":
         from .studio.app import main as studio_main
         return studio_main(sys.argv[2:])

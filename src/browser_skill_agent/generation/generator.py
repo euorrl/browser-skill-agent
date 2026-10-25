@@ -233,7 +233,7 @@ def generate(recording, model, output_root, guidance=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="从已完成录制生成 Skill 草稿（调用 LLM，不执行网页操作）")
     parser.add_argument("recording", type=Path, help="录制目录，含 session.json、actions.json、events.jsonl")
-    parser.add_argument("--output-dir", type=Path, default=Path("data/generated"), help="草稿父目录，默认 data/generated")
+    parser.add_argument("--output-dir", type=Path, default=Path("skills"), help="流程父目录，默认 skills")
     parser.add_argument("--timeout", type=float, default=300, help="模型请求超时秒数，默认 300；不自动重试")
     args = parser.parse_args(argv)
     if not 0 < args.timeout < float("inf"):
