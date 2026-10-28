@@ -36,7 +36,7 @@ def write_json(path, data):
 
 
 def validate_flow(path, defaults, model, output_root, *, checks=None, max_repairs=2,
-                  allow_files=True, progress=lambda text: None, cancel=None, credentials=None, login_prompt=None, trial_on_contract_failure=True):
+                  allow_files=True, progress=lambda text: None, cancel=None, credentials=None, login_prompt=None, headless=True, trial_on_contract_failure=True):
     if not isinstance(max_repairs, int) or not 0 <= max_repairs <= 3:
         raise ValueError('修复次数必须为 0–3')
     folder = Path(output_root) / (datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid4().hex[:8])
@@ -47,7 +47,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
     defaults = {k: ("" if k in secrets else v) for k,v in defaults.items()}
     candidate = original
     report = {'status': 'blocked', 'started_at': datetime.now(timezone.utc).isoformat(),
-              'scope': '仅验证本次参数和固定验收条件；不保证所有取值、网站版本或外部状态', 'approval': 'allow',
+              'scope': '仅验证本次参数和固定验收条件；不保证所有取值、网站版本或外部状态', 'approval': 'allow', 'headless': headless,
               'defaults': defaults, 'contract_attempts': [], 'attempts': [], 'repairs': [], 'checks': [],
               'source_path': str(Path(path).resolve()), 'source_sha256': hashlib.sha256(original.encode()).hexdigest(), 'folder': str(folder.resolve())}
     initial_usage = deepcopy(getattr(model, 'usage', {}))
@@ -58,6 +58,10 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
     report['file_budget'] = file_limit
     report['file_budget_scope'] = 'revision'
     report['allow_files'] = allow_files
+    def headless_login(message, details):
+        raise RuntimeError('无头验证遇到人工登录，已停止；请使用有窗口验证（--headed）完成登录接管。')
+
+    effective_login_prompt = headless_login if headless else login_prompt
     def stopped():
         return (cancel is not None and cancel.is_set()) or monotonic() > deadline
     class BoundedModel:
@@ -98,6 +102,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
         report['checks'] = checks
         write_json(folder/'checks.json', checks)
         progress('自动验证授权：全部允许；' + ('上传下载已启用，每个修复版本独立计算文件次数。' if allow_files else '本次明确禁用上传下载。'))
+        progress('验证浏览器：无头模式（headless）' if headless else '验证浏览器：有窗口模式')
         source_files = FileOptions.from_skill(bound) if allow_files else FileOptions()
         # 一次复制指定文件；每轮上传仅能读这些副本，下载始终写入本轮独立目录。
         isolated = {}
@@ -107,7 +112,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
             shutil.copy2(source, destination)
             isolated[key] = destination.resolve()
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(channel='msedge', headless=login_prompt is None, args=RESULT_ONLY_ARGS if login_prompt else [])
+            browser = pw.chromium.launch(channel='msedge', headless=headless, args=RESULT_ONLY_ARGS if not headless and login_prompt else [])
             try:
                 for revision in range(max_repairs+1):
                     if stopped():
@@ -136,8 +141,8 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                             path_map = {str(source): str(isolated[key]) for key,source in source_files.uploads.items()}
                             policy = ApprovalPolicy('allow', skill)
                             tools = BrowserTools(page, approval=policy, file_options=options)
-                            presentation = ResultOnlyDisplay(context) if login_prompt else None
-                            tools.session.login_handler = LoginHandler(tools, skill, login_credentials, login_prompt, presentation)
+                            presentation = ResultOnlyDisplay(context) if not headless and login_prompt else None
+                            tools.session.login_handler = LoginHandler(tools, skill, login_credentials, effective_login_prompt, presentation)
                             execute = tools.execute
                             def traced(name, args):
                                 nonlocal file_calls, revision_file_calls, blocked
@@ -192,7 +197,7 @@ def validate_flow(path, defaults, model, output_root, *, checks=None, max_repair
                         report.update(status='passed', reason='同一版流程在独立脚本及 LLM 会话中均通过固定验收条件', revision=revision)
                         break
                     if any(a.get('policy_blocked') for a in pair) or stopped():
-                        report['reason'] = '遇到权限、文件次数或时间边界，停止自动修复'; break
+                        report['reason'] = next((r['result'].get('error') for a in pair for r in a.get('trace', []) if r['result'].get('login_blocked')), None) or '遇到权限、文件次数或时间边界，停止自动修复'; break
                     if revision == max_repairs:
                         report['reason'] = '达到修复上限，保留诊断与候选版本'; break
                     progress('正在依据失败现场修复流程，验收条件保持不变…')

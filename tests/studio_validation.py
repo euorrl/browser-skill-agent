@@ -23,7 +23,7 @@ class Model(FakeModel):
         if prompt == CONTRACT_PROMPT:
             contract=checks();contract[0]['args']['value']='查询完成：'+state['skill']['params']['query']+' / 教程'
             contract[1]['equals']=contract[0]['args']['value']
-            return {'checks':contract,'message':'验证真实结果'}
+            return {'coverage':{'complete':True,'missing':[]},'checks':contract,'message':'验证真实结果'}
         return super().request(state,prompt)
     def decide(self, state):
         result=super().decide(state)

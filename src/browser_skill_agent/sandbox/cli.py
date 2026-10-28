@@ -20,6 +20,7 @@ def main(argv=None):
     parser.add_argument('--checks', type=Path, help='固定验收 JSON 列表；省略时由模型根据原任务制定')
     parser.add_argument('--max-repairs', type=int, default=2, choices=range(4))
     parser.add_argument('--allow-files', action=argparse.BooleanOptionalAction, default=True, help='默认允许有限次数上传下载；--no-allow-files 暂停文件操作')
+    parser.add_argument('--headed', action='store_true', help='使用有窗口验证，允许人工登录接管；默认无头运行')
     parser.add_argument('--output', type=Path, default=Path('data/validations'))
     args = parser.parse_args(argv)
     load_dotenv()
@@ -43,6 +44,6 @@ def main(argv=None):
         model = GenerationModel(client, *config, timeout=120, progress=print)
         report = validate_flow(args.skill, defaults, model, args.output, checks=checks,
                                max_repairs=args.max_repairs, allow_files=args.allow_files, progress=print,
-                               credentials=credentials, login_prompt=login_prompt)
+                               credentials=credentials, login_prompt=login_prompt, headless=not args.headed)
     print(json.dumps({k: report.get(k) for k in ('status','reason','folder','usage','elapsed_seconds')}, ensure_ascii=False, indent=2))
     return 0 if report['status'] == 'passed' else 1
